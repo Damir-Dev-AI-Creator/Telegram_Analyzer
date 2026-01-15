@@ -1,4 +1,3 @@
-# .github/workflows/build.yml
 name: Build Ysell Analyzer
 
 on:
@@ -14,12 +13,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
-        run: |
+      - run: |
           pip install -r requirements.txt
           pip install pyinstaller
-      - name: Build
-        run: pyinstaller --onefile --windowed --name YsellAnalyzer main.py --hidden-import=customtkinter --hidden-import=telethon --hidden-import=anthropic --hidden-import=pandas --hidden-import=docx --collect-all customtkinter
+      - run: pyinstaller --onefile --windowed --name YsellAnalyzer main.py --hidden-import=customtkinter --hidden-import=telethon --hidden-import=anthropic --hidden-import=pandas --hidden-import=docx --collect-all customtkinter
       - uses: actions/upload-artifact@v4
         with:
           name: YsellAnalyzer-Windows
@@ -32,14 +29,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
-        run: |
+      - run: |
           pip install -r requirements.txt
           pip install pyinstaller
-      - name: Build
-        run: pyinstaller --onefile --windowed --name YsellAnalyzer main.py --hidden-import=customtkinter --hidden-import=telethon --hidden-import=anthropic --hidden-import=pandas --hidden-import=docx --collect-all customtkinter
-      - name: Archive
-        run: cd dist && zip -r ../YsellAnalyzer-macOS.zip YsellAnalyzer.app || zip -r ../YsellAnalyzer-macOS.zip YsellAnalyzer
+      - run: pyinstaller --onefile --windowed --name YsellAnalyzer main.py --hidden-import=customtkinter --hidden-import=telethon --hidden-import=anthropic --hidden-import=pandas --hidden-import=docx --collect-all customtkinter
+      - run: cd dist && zip -r ../YsellAnalyzer-macOS.zip YsellAnalyzer.app || zip -r ../YsellAnalyzer-macOS.zip YsellAnalyzer
       - uses: actions/upload-artifact@v4
         with:
           name: YsellAnalyzer-macOS
@@ -52,16 +46,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install system deps
-        run: sudo apt-get update && sudo apt-get install -y python3-tk
-      - name: Install dependencies
-        run: |
+      - run: sudo apt-get update && sudo apt-get install -y python3-tk
+      - run: |
           pip install -r requirements.txt
           pip install pyinstaller
-      - name: Build
-        run: pyinstaller --onefile --name YsellAnalyzer main.py --hidden-import=customtkinter --hidden-import=telethon --hidden-import=anthropic --hidden-import=pandas --hidden-import=docx --collect-all customtkinter
-      - name: Archive
-        run: cd dist && tar -czvf ../YsellAnalyzer-Linux.tar.gz YsellAnalyzer
+      - run: pyinstaller --onefile --name YsellAnalyzer main.py --hidden-import=customtkinter --hidden-import=telethon --hidden-import=anthropic --hidden-import=pandas --hidden-import=docx --collect-all customtkinter
+      - run: cd dist && tar -czvf ../YsellAnalyzer-Linux.tar.gz YsellAnalyzer
       - uses: actions/upload-artifact@v4
         with:
           name: YsellAnalyzer-Linux

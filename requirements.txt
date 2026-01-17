@@ -2,7 +2,8 @@
 # Install: pip install -r requirements.txt
 
 # Core
-telethon>=1.42.0           # Telegram API client (updated for latest features)
+telethon>=1.42.0           # Telegram API client (MTProto - full history export)
+python-telegram-bot>=21.0  # HTTP Bot API (lightweight mode - new messages only)
 pandas>=2.3.0              # Data processing (security fix: CVE-2024-9880)
 python-dotenv>=1.2.0       # Environment variables (Python 3.14 support)
 

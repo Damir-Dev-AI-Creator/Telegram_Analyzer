@@ -1,11 +1,14 @@
 # telegram.py
-"""Модуль для экспорта сообщений из Telegram"""
+"""Модуль для экспорта сообщений из Telegram (MTProto API - полный функционал)"""
 
 import csv
 import asyncio
 import re
 import logging
-from core.config import API_ID, API_HASH, PHONE, EXCLUDE_USER_ID, EXCLUDE_USERNAME, EXPORT_FOLDER, SESSION_PATH
+from core.config import (
+    API_ID, API_HASH, PHONE, BOT_TOKEN, USE_MTPROTO,
+    EXCLUDE_USER_ID, EXCLUDE_USERNAME, EXPORT_FOLDER, SESSION_PATH
+)
 from datetime import datetime, timezone
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
@@ -204,6 +207,104 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
         raise
     finally:
         await client.disconnect()
+
+
+async def get_bot_chats_mtproto():
+    """
+    Получить список чатов, где бот является участником (MTProto API)
+
+    Работает только в MTProto режиме с BOT_TOKEN
+
+    Returns:
+        List[dict]: Список чатов с информацией
+    """
+    if not API_ID or API_ID == 0:
+        raise ValueError("API_ID не настроен")
+
+    if not API_HASH or API_HASH.strip() == "":
+        raise ValueError("API_HASH не настроен")
+
+    if not BOT_TOKEN or BOT_TOKEN.strip() == "":
+        raise ValueError("BOT_TOKEN не настроен. Эта функция работает только с ботом.")
+
+    client = TelegramClient(str(SESSION_PATH), API_ID, API_HASH)
+
+    try:
+        # Авторизация бота
+        await client.start(bot_token=BOT_TOKEN)
+        logger.info("✅ Бот авторизован (MTProto)")
+
+        chats = []
+
+        # Получение списка диалогов
+        async for dialog in client.iter_dialogs():
+            # Фильтруем только группы и каналы
+            if dialog.is_group or dialog.is_channel:
+                try:
+                    # Проверяем права бота
+                    permissions = await client.get_permissions(dialog.entity, 'me')
+
+                    chat_info = {
+                        'id': dialog.id,
+                        'title': dialog.title,
+                        'type': 'channel' if dialog.is_channel else 'group',
+                        'username': getattr(dialog.entity, 'username', None),
+                        'is_admin': permissions.is_admin,
+                        'can_read_history': True  # В MTProto с правами админа всегда можно
+                    }
+
+                    chats.append(chat_info)
+                    logger.info(f"Найден чат: {chat_info['title']} (admin: {chat_info['is_admin']})")
+
+                except Exception as e:
+                    logger.warning(f"Не удалось получить информацию о чате {dialog.title}: {e}")
+
+        logger.info(f"📋 Найдено чатов: {len(chats)}")
+        return chats
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения списка чатов: {e}")
+        raise
+    finally:
+        await client.disconnect()
+
+
+async def export_with_mode_detection(chat: str, start_date: str = None, end_date: str = None,
+                                     limit: int = 10000, code_handler=None):
+    """
+    Универсальная функция экспорта с автоматическим выбором режима
+
+    Выбирает MTProto или HTTP Bot API в зависимости от конфигурации
+
+    Args:
+        chat: ID или username чата
+        start_date: Дата начала (работает только в MTProto)
+        end_date: Дата конца (работает только в MTProto)
+        limit: Максимальное количество сообщений
+        code_handler: Обработчик для получения кода авторизации (только MTProto)
+
+    Returns:
+        str: Имя созданного файла
+    """
+    if USE_MTPROTO:
+        logger.info("🚀 Используется MTProto API (полный функционал)")
+        return await export_telegram_csv(chat, start_date, end_date, limit, code_handler)
+    else:
+        logger.info("🤖 Используется HTTP Bot API (только новые сообщения)")
+
+        if start_date or end_date:
+            logger.warning("⚠️  Даты игнорируются в HTTP Bot API режиме (история недоступна)")
+
+        # Импорт здесь, чтобы избежать проблем если библиотека не установлена
+        from services.telegram_bot import export_telegram_bot_mode
+
+        # Конвертация chat в ID если это строка
+        try:
+            chat_id = int(chat) if str(chat).lstrip('-').isdigit() else chat
+        except:
+            raise ValueError(f"В HTTP Bot API режиме нужен числовой ID чата, получено: {chat}")
+
+        return await export_telegram_bot_mode(chat_id, limit)
 
 
 if __name__ == "__main__":

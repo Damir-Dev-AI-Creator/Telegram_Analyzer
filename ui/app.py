@@ -100,22 +100,54 @@ class YsellAnalyzerApp:
         main_frame = ctk.CTkFrame(self.tab_export, fg_color="transparent")
         main_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        # Заголовок
+        # Заголовок с индикатором режима
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 15))
+
         ctk.CTkLabel(
-            main_frame,
+            header_frame,
             text="Экспорт сообщений из Telegram",
             font=("Arial", 18, "bold")
-        ).pack(pady=(0, 15))
+        ).pack(side="left")
+
+        # Индикатор режима
+        from core.config import USE_MTPROTO
+        mode_text = "MTProto" if USE_MTPROTO else "HTTP Bot API"
+        mode_color = "#28a745" if USE_MTPROTO else "#ffc107"
+
+        self.mode_indicator = ctk.CTkLabel(
+            header_frame,
+            text=f"🔧 {mode_text}",
+            font=("Arial", 11, "bold"),
+            text_color=mode_color,
+            corner_radius=5
+        )
+        self.mode_indicator.pack(side="right", padx=10)
 
         # === Блок добавления чата ===
         add_frame = ctk.CTkFrame(main_frame, corner_radius=10)
         add_frame.pack(fill="x", pady=(0, 15))
 
+        add_header = ctk.CTkFrame(add_frame, fg_color="transparent")
+        add_header.pack(fill="x", pady=(15, 10), padx=15)
+
         ctk.CTkLabel(
-            add_frame,
+            add_header,
             text="➕ Добавить чат для экспорта",
             font=("Arial", 13, "bold")
-        ).pack(pady=(15, 10))
+        ).pack(side="left")
+
+        # Кнопка загрузки чатов бота (только для MTProto с BOT_TOKEN)
+        from core.config import USE_MTPROTO, BOT_TOKEN
+        if USE_MTPROTO and BOT_TOKEN:
+            ctk.CTkButton(
+                add_header,
+                text="📋 Чаты бота",
+                command=self._load_bot_chats,
+                width=120,
+                height=30,
+                font=("Arial", 11)
+            ).pack(side="right")
 
         # Chat ID
         chat_input_frame = ctk.CTkFrame(add_frame, fg_color="transparent")
@@ -407,15 +439,16 @@ class YsellAnalyzerApp:
 
     def _run_batch_export(self, analyze_after: bool):
         """Выполнение пакетного экспорта (в отдельном потоке)"""
-        from services.telegram import export_telegram_csv
+        from services.telegram import export_with_mode_detection
         from ui.auth_dialog import TelegramCodeHandler
+        from core.config import USE_MTPROTO
 
         total = len(self.chat_list)
         exported_files = []
         errors = []
 
-        # Создаём обработчик авторизации один раз
-        code_handler = TelegramCodeHandler(self.root)
+        # Создаём обработчик авторизации один раз (только для MTProto с PHONE)
+        code_handler = TelegramCodeHandler(self.root) if USE_MTPROTO else None
 
         for i, item in enumerate(self.chat_list):
             chat_id = item['chat_id']
@@ -426,12 +459,12 @@ class YsellAnalyzerApp:
                                                                                                  f"[{idx + 1}/{total}] Экспорт: {c}"))
 
             try:
-                # Запуск экспорта
+                # Запуск экспорта с автоопределением режима
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
                 result = loop.run_until_complete(
-                    export_telegram_csv(
+                    export_with_mode_detection(
                         chat=chat_id,
                         start_date=item['start_date'],
                         end_date=item['end_date'],
@@ -911,6 +944,149 @@ class YsellAnalyzerApp:
     def _set_status(self, text: str):
         """Установить текст статуса"""
         self.status_label.configure(text=text)
+
+    # =========================================================================
+    # ФУНКЦИИ ДЛЯ РАБОТЫ С БОТОМ
+    # =========================================================================
+
+    def _load_bot_chats(self):
+        """Загрузить список чатов, где бот является участником"""
+        from core.config import USE_MTPROTO, BOT_TOKEN
+
+        if not USE_MTPROTO:
+            messagebox.showwarning(
+                "Недоступно",
+                "Список чатов доступен только в MTProto режиме.\n\n"
+                "HTTP Bot API не поддерживает получение списка чатов."
+            )
+            return
+
+        if not BOT_TOKEN:
+            messagebox.showwarning(
+                "BOT_TOKEN не настроен",
+                "Для получения списка чатов нужен Bot Token.\n\n"
+                "Настройте BOT_TOKEN в настройках приложения."
+            )
+            return
+
+        self._set_status("⏳ Загрузка чатов бота...")
+
+        # Запуск в отдельном потоке
+        thread = threading.Thread(target=self._run_load_bot_chats, daemon=True)
+        thread.start()
+
+    def _run_load_bot_chats(self):
+        """Выполнение загрузки чатов бота (в отдельном потоке)"""
+        from services.telegram import get_bot_chats_mtproto
+
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            chats = loop.run_until_complete(get_bot_chats_mtproto())
+            loop.close()
+
+            if not chats:
+                self.root.after(0, lambda: messagebox.showinfo(
+                    "Нет чатов",
+                    "Бот не добавлен ни в какие группы или каналы.\n\n"
+                    "Добавьте бота в нужные чаты и попробуйте снова."
+                ))
+                self.root.after(0, lambda: self._set_status("ℹ️ Нет чатов бота"))
+                return
+
+            # Показываем диалог выбора чата
+            self.root.after(0, lambda c=chats: self._show_bot_chats_dialog(c))
+            self.root.after(0, lambda: self._set_status(f"✅ Найдено чатов: {len(chats)}"))
+
+        except Exception as e:
+            error_msg = str(e)
+            self.root.after(0, lambda: messagebox.showerror("Ошибка", f"Не удалось загрузить чаты:\n\n{error_msg}"))
+            self.root.after(0, lambda: self._set_status(f"❌ Ошибка загрузки чатов"))
+
+    def _show_bot_chats_dialog(self, chats):
+        """Показать диалог выбора чата из списка чатов бота"""
+        # Создаем новое окно
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Выберите чат")
+        dialog.geometry("600x500")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Центрирование окна
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (600 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (500 // 2)
+        dialog.geometry(f'600x500+{x}+{y}')
+
+        # Заголовок
+        ctk.CTkLabel(
+            dialog,
+            text="📋 Чаты, где бот является участником",
+            font=("Arial", 16, "bold")
+        ).pack(pady=15)
+
+        # Список чатов
+        list_frame = ctk.CTkScrollableFrame(dialog)
+        list_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+
+        for chat in chats:
+            chat_frame = ctk.CTkFrame(list_frame, corner_radius=8)
+            chat_frame.pack(fill="x", pady=5)
+
+            # Информация о чате
+            info_frame = ctk.CTkFrame(chat_frame, fg_color="transparent")
+            info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+
+            title = f"{'📢' if chat['type'] == 'channel' else '👥'} {chat['title']}"
+            ctk.CTkLabel(
+                info_frame,
+                text=title,
+                font=("Arial", 13, "bold"),
+                anchor="w"
+            ).pack(anchor="w")
+
+            details = f"ID: {chat['id']}"
+            if chat.get('username'):
+                details += f" | @{chat['username']}"
+            details += f" | {'✅ Админ' if chat['is_admin'] else '⚠️ Не админ'}"
+
+            ctk.CTkLabel(
+                info_frame,
+                text=details,
+                font=("Arial", 9),
+                text_color="gray",
+                anchor="w"
+            ).pack(anchor="w")
+
+            # Кнопка добавления
+            ctk.CTkButton(
+                chat_frame,
+                text="➕",
+                width=40,
+                command=lambda c=chat, d=dialog: self._add_chat_from_list(c, d)
+            ).pack(side="right", padx=10)
+
+        # Кнопка закрытия
+        ctk.CTkButton(
+            dialog,
+            text="Закрыть",
+            command=dialog.destroy,
+            width=200
+        ).pack(pady=10)
+
+    def _add_chat_from_list(self, chat, dialog):
+        """Добавить чат из списка в очередь"""
+        # Вставляем ID или username в поле
+        chat_identifier = f"@{chat['username']}" if chat.get('username') else str(chat['id'])
+        self.chat_entry.delete(0, END)
+        self.chat_entry.insert(0, chat_identifier)
+
+        # Закрываем диалог
+        dialog.destroy()
+
+        # Показываем уведомление
+        self._set_status(f"✅ Выбран чат: {chat['title']}")
 
 
 def run_gui():

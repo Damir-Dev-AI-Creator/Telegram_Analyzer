@@ -119,13 +119,29 @@ def is_configured() -> bool:
 
 def get_missing_vars() -> list:
     """Получить список отсутствующих переменных"""
-    required_vars = ['API_ID', 'API_HASH', 'PHONE', 'CLAUDE_API_KEY']
     missing = []
 
-    for var in required_vars:
-        value = os.getenv(var)
-        if not value or value.strip() == "":
-            missing.append(var)
+    # Claude API всегда обязателен
+    if not os.getenv('CLAUDE_API_KEY') or os.getenv('CLAUDE_API_KEY').strip() == "":
+        missing.append('CLAUDE_API_KEY')
+
+    # Проверка в зависимости от режима
+    if USE_MTPROTO:
+        # MTProto режим: требуется API_ID, API_HASH, PHONE или BOT_TOKEN
+        required_vars = ['API_ID', 'API_HASH']
+        for var in required_vars:
+            value = os.getenv(var)
+            if not value or value.strip() == "":
+                missing.append(var)
+
+        # Нужен либо PHONE (user), либо BOT_TOKEN (bot)
+        if (not os.getenv('PHONE') or os.getenv('PHONE').strip() == "") and \
+           (not os.getenv('BOT_TOKEN') or os.getenv('BOT_TOKEN').strip() == ""):
+            missing.append('PHONE or BOT_TOKEN')
+    else:
+        # HTTP Bot API режим: требуется только BOT_TOKEN
+        if not os.getenv('BOT_TOKEN') or os.getenv('BOT_TOKEN').strip() == "":
+            missing.append('BOT_TOKEN')
 
     return missing
 
@@ -151,10 +167,22 @@ def _get_str(key: str, default: str = "") -> str:
     return value.strip() if value else default
 
 
+def _get_bool(key: str, default: bool = False) -> bool:
+    """Безопасное получение bool из env"""
+    value = os.getenv(key)
+    if value and value.strip():
+        return value.strip().lower() in ('true', '1', 'yes', 'on')
+    return default
+
+
+# Режим авторизации
+USE_MTPROTO: bool = _get_bool("USE_MTPROTO", True)  # По умолчанию MTProto (полный функционал)
+
 # Основные параметры
 API_ID: int = _get_int("API_ID", 0)
 API_HASH: str = _get_str("API_HASH", "")
 PHONE: str = _get_str("PHONE", "")
+BOT_TOKEN: str = _get_str("BOT_TOKEN", "")
 CLAUDE_API_KEY: str = _get_str("CLAUDE_API_KEY", "")
 
 # Опциональные параметры
@@ -180,56 +208,101 @@ def validate_config() -> Tuple[bool, str]:
     if missing:
         return False, f"Отсутствуют переменные: {', '.join(missing)}"
 
-    if API_ID == 0:
-        return False, "API_ID не настроен или имеет неверный формат"
-
-    if not API_HASH:
-        return False, "API_HASH не настроен"
-
-    if not PHONE:
-        return False, "PHONE не настроен"
-
     if not CLAUDE_API_KEY:
         return False, "CLAUDE_API_KEY не настроен"
+
+    if USE_MTPROTO:
+        # MTProto режим: проверка API_ID и API_HASH
+        if API_ID == 0:
+            return False, "API_ID не настроен или имеет неверный формат"
+
+        if not API_HASH:
+            return False, "API_HASH не настроен"
+
+        # Проверка наличия PHONE или BOT_TOKEN
+        if not PHONE and not BOT_TOKEN:
+            return False, "Не настроен ни PHONE, ни BOT_TOKEN"
+    else:
+        # HTTP Bot API режим: проверка только BOT_TOKEN
+        if not BOT_TOKEN:
+            return False, "BOT_TOKEN не настроен"
 
     return True, "Конфигурация валидна"
 
 
 def reload_config():
     """Перезагрузка конфигурации из .env файла"""
-    global API_ID, API_HASH, PHONE, CLAUDE_API_KEY
-    global EXCLUDE_USER_ID, EXCLUDE_USERNAME
+    global API_ID, API_HASH, PHONE, BOT_TOKEN, CLAUDE_API_KEY
+    global EXCLUDE_USER_ID, EXCLUDE_USERNAME, USE_MTPROTO
 
     load_dotenv(get_env_path(), override=True)
 
+    USE_MTPROTO = _get_bool("USE_MTPROTO", True)
     API_ID = _get_int("API_ID", 0)
     API_HASH = _get_str("API_HASH", "")
     PHONE = _get_str("PHONE", "")
+    BOT_TOKEN = _get_str("BOT_TOKEN", "")
     CLAUDE_API_KEY = _get_str("CLAUDE_API_KEY", "")
     EXCLUDE_USER_ID = _get_int("EXCLUDE_USER_ID", 0)
     EXCLUDE_USERNAME = _get_str("EXCLUDE_USERNAME", "")
 
 
 def save_config(
-        api_id: str,
-        api_hash: str,
-        phone: str,
         claude_api_key: str,
+        use_mtproto: bool = True,
+        api_id: str = "",
+        api_hash: str = "",
+        phone: str = "",
+        bot_token: str = "",
         exclude_user_id: str = "0",
         exclude_username: str = ""
 ) -> None:
     """Сохранение конфигурации в .env файл"""
-    env_content = f"""# Telegram API Configuration
+    env_content = f"""# ============================================
+# Режим работы
+# ============================================
+# USE_MTPROTO=true  - MTProto API (полный функционал, экспорт истории)
+# USE_MTPROTO=false - HTTP Bot API (только новые сообщения, без API_ID/API_HASH)
+USE_MTPROTO={str(use_mtproto).lower()}
+
+# ============================================
+# Telegram API Configuration
+# ============================================
+"""
+
+    if use_mtproto:
+        env_content += f"""# MTProto требует API_ID и API_HASH
 # Получите на https://my.telegram.org/apps
 API_ID={api_id}
 API_HASH={api_hash}
+
+# Для User Bot (авторизация по номеру телефона)
 PHONE={phone}
 
+# Для Bot (авторизация по токену от @BotFather)
+BOT_TOKEN={bot_token}
+"""
+    else:
+        env_content += f"""# HTTP Bot API требует только BOT_TOKEN
+# Получите токен у @BotFather в Telegram
+BOT_TOKEN={bot_token}
+
+# API_ID и API_HASH не требуются в HTTP Bot API режиме
+API_ID=
+API_HASH=
+PHONE=
+"""
+
+    env_content += f"""
+# ============================================
 # Claude API Configuration (Anthropic)
+# ============================================
 # Получите на https://console.anthropic.com/settings/keys
 CLAUDE_API_KEY={claude_api_key}
 
+# ============================================
 # Optional Settings
+# ============================================
 EXCLUDE_USER_ID={exclude_user_id}
 EXCLUDE_USERNAME={exclude_username}
 """

@@ -192,27 +192,98 @@ class SetupWindow:
             "📱 Telegram API",
             "https://my.telegram.org/apps"
         )
-        
+
+        # Выбор режима
+        mode_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        mode_frame.pack(fill="x", pady=8, padx=10)
+
+        ctk.CTkLabel(
+            mode_frame,
+            text="Режим работы:",
+            font=("Arial", 12, "bold"),
+            anchor="w"
+        ).pack(anchor="w")
+
+        self.mode_var = ctk.StringVar(value="mtproto")
+
+        # MTProto режим (полный функционал)
+        mtproto_radio = ctk.CTkRadioButton(
+            mode_frame,
+            text="MTProto API (рекомендуется) - Экспорт истории сообщений",
+            variable=self.mode_var,
+            value="mtproto",
+            command=self._toggle_mode_fields,
+            font=("Arial", 11)
+        )
+        mtproto_radio.pack(anchor="w", pady=3)
+
+        # HTTP Bot API режим (облегченный)
+        http_radio = ctk.CTkRadioButton(
+            mode_frame,
+            text="HTTP Bot API (облегченный) - Только новые сообщения",
+            variable=self.mode_var,
+            value="http",
+            command=self._toggle_mode_fields,
+            font=("Arial", 11)
+        )
+        http_radio.pack(anchor="w", pady=3)
+
+        ctk.CTkLabel(
+            mode_frame,
+            text="💡 MTProto позволяет экспортировать историю, HTTP Bot API - только новые сообщения",
+            font=("Arial", 9),
+            text_color="gray",
+            anchor="w",
+            wraplength=580
+        ).pack(anchor="w", pady=(3, 0))
+
+        # Поля MTProto (показываются по умолчанию)
+        self.mtproto_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.mtproto_frame.pack(fill="x")
+
         self.api_id_entry = self._create_field(
-            parent,
+            self.mtproto_frame,
             "API ID:",
             "12345678",
-            "Числовой идентификатор приложения"
+            "Получите на https://my.telegram.org/apps",
+            required=False  # Зависит от режима
         )
-        
+
         self.api_hash_entry = self._create_field(
-            parent,
+            self.mtproto_frame,
             "API Hash:",
             "abcdef1234567890abcdef1234567890",
-            "Хеш приложения (32 символа)"
+            "Хеш приложения (32 символа)",
+            required=False
         )
-        
+
         self.phone_entry = self._create_field(
-            parent,
-            "Номер телефона:",
+            self.mtproto_frame,
+            "Номер телефона (для User Bot):",
             "+1234567890",
-            "В международном формате с +"
+            "Опционально: для авторизации как пользователь",
+            required=False
         )
+
+        # Поле для Bot Token (для обоих режимов)
+        self.bot_token_entry = self._create_field(
+            parent,
+            "Bot Token (для Bot режима):",
+            "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
+            "Получите у @BotFather в Telegram (опционально в MTProto, обязательно в HTTP Bot API)",
+            required=False
+        )
+
+    def _toggle_mode_fields(self):
+        """Переключение видимости полей в зависимости от режима"""
+        mode = self.mode_var.get()
+
+        if mode == "mtproto":
+            # Показать поля MTProto
+            self.mtproto_frame.pack(fill="x")
+        else:
+            # Скрыть поля MTProto
+            self.mtproto_frame.pack_forget()
     
     def _create_claude_section(self, parent):
         """Секция Claude API (Anthropic)"""
@@ -302,69 +373,93 @@ class SetupWindow:
     def _validate(self) -> bool:
         """Валидация полей"""
         errors = []
-        
-        # API ID
-        api_id = self.api_id_entry.get().strip()
-        if not api_id:
-            errors.append("• API ID не может быть пустым")
-        elif not api_id.isdigit():
-            errors.append("• API ID должен быть числом")
-        
-        # API Hash
-        api_hash = self.api_hash_entry.get().strip()
-        valid, msg = validate_api_hash(api_hash)
-        if not valid:
-            errors.append(f"• API Hash: {msg}")
-        
-        # Phone
-        phone = self.phone_entry.get().strip()
-        valid, msg = validate_phone(phone)
-        if not valid:
-            errors.append(f"• Телефон: {msg}")
-        
-        # Claude API
+        mode = self.mode_var.get()
+
+        # Claude API (всегда обязателен)
         claude_key = self.claude_entry.get().strip()
         if not claude_key:
             errors.append("• Claude API Key не может быть пустым")
         elif not claude_key.startswith("sk-ant-"):
             errors.append("• Claude API Key должен начинаться с 'sk-ant-'")
-        
+
+        if mode == "mtproto":
+            # MTProto режим: проверка API_ID, API_HASH
+            api_id = self.api_id_entry.get().strip()
+            if not api_id:
+                errors.append("• API ID не может быть пустым в MTProto режиме")
+            elif not api_id.isdigit():
+                errors.append("• API ID должен быть числом")
+
+            api_hash = self.api_hash_entry.get().strip()
+            valid, msg = validate_api_hash(api_hash)
+            if not valid:
+                errors.append(f"• API Hash: {msg}")
+
+            # Проверка наличия хотя бы одного: PHONE или BOT_TOKEN
+            phone = self.phone_entry.get().strip()
+            bot_token = self.bot_token_entry.get().strip()
+
+            if not phone and not bot_token:
+                errors.append("• Заполните хотя бы одно: Номер телефона или Bot Token")
+
+            # Если указан телефон, валидируем его
+            if phone:
+                valid, msg = validate_phone(phone)
+                if not valid:
+                    errors.append(f"• Телефон: {msg}")
+
+        else:  # HTTP Bot API режим
+            # HTTP режим: требуется только BOT_TOKEN
+            bot_token = self.bot_token_entry.get().strip()
+            if not bot_token:
+                errors.append("• Bot Token обязателен в HTTP Bot API режиме")
+            elif not ":" in bot_token:
+                errors.append("• Bot Token должен содержать ':' (формат: 123456789:ABC...)")
+
         if errors:
             messagebox.showerror(
                 "Ошибка валидации",
                 "Исправьте следующие ошибки:\n\n" + "\n".join(errors)
             )
             return False
-        
+
         return True
     
     def _save_config(self):
         """Сохранение конфигурации"""
         if not self._validate():
             return
-        
+
         try:
+            mode = self.mode_var.get()
+            use_mtproto = (mode == "mtproto")
+
             save_config(
-                api_id=self.api_id_entry.get().strip(),
-                api_hash=self.api_hash_entry.get().strip(),
-                phone=self.phone_entry.get().strip(),
                 claude_api_key=self.claude_entry.get().strip(),
+                use_mtproto=use_mtproto,
+                api_id=self.api_id_entry.get().strip() if use_mtproto else "",
+                api_hash=self.api_hash_entry.get().strip() if use_mtproto else "",
+                phone=self.phone_entry.get().strip() if use_mtproto else "",
+                bot_token=self.bot_token_entry.get().strip(),
                 exclude_user_id=self.exclude_id_entry.get().strip() or "0",
                 exclude_username=self.exclude_name_entry.get().strip() or ""
             )
-            
+
+            mode_text = "MTProto API (полный функционал)" if use_mtproto else "HTTP Bot API (только новые сообщения)"
+
             messagebox.showinfo(
                 "Успех!",
-                "✅ Конфигурация успешно сохранена!\n\n"
+                f"✅ Конфигурация успешно сохранена!\n\n"
+                f"Режим: {mode_text}\n"
                 f"Файл: {get_env_path()}\n\n"
                 "Приложение готово к работе."
             )
-            
+
             self.window.destroy()
-            
+
             if self.on_complete:
                 self.on_complete()
-                
+
         except Exception as e:
             messagebox.showerror(
                 "Ошибка",

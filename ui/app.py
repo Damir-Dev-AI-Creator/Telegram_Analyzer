@@ -1276,11 +1276,11 @@ class YsellAnalyzerApp:
         ).pack(side="right", padx=5)
 
     def _open_bot_setup_guide(self):
-        """Открыть BOT_SETUP_GUIDE.md в браузере/текстовом редакторе"""
+        """Открыть USER_ACCOUNT_GUIDE.md в браузере/текстовом редакторе"""
         import webbrowser
         import platform
 
-        guide_path = Path(__file__).parent.parent / "BOT_SETUP_GUIDE.md"
+        guide_path = Path(__file__).parent.parent / "USER_ACCOUNT_GUIDE.md"
 
         if guide_path.exists():
             if platform.system() == 'Darwin':  # macOS

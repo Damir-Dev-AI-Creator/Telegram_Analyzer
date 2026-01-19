@@ -241,22 +241,30 @@ class SetupWindow:
         self.mtproto_frame = ctk.CTkFrame(parent, fg_color="transparent")
         self.mtproto_frame.pack(fill="x")
 
-        # Важная информация про Bot Token
-        info_box = ctk.CTkFrame(self.mtproto_frame, fg_color="#2b5278", corner_radius=8)
+        # Важная информация про User Account для экспорта
+        info_box = ctk.CTkFrame(self.mtproto_frame, fg_color="#d9534f", corner_radius=8)
         info_box.pack(fill="x", pady=(0, 10))
 
         ctk.CTkLabel(
             info_box,
-            text="ℹ️ Для работы с Bot Token номер телефона НЕ нужен!",
+            text="⚠️ Для экспорта истории нужен номер телефона!",
             font=("Arial", 11, "bold"),
             anchor="w"
         ).pack(anchor="w", padx=10, pady=(10, 5))
 
         ctk.CTkLabel(
             info_box,
-            text="Заполните: API_ID + API_HASH + Bot Token (без Phone)",
+            text="Bot Token НЕ МОЖЕТ экспортировать историю (ограничение Telegram API)",
             font=("Arial", 9),
-            text_color="#cccccc",
+            text_color="#ffffff",
+            anchor="w"
+        ).pack(anchor="w", padx=10, pady=(0, 5))
+
+        ctk.CTkLabel(
+            info_box,
+            text="Заполните: API_ID + API_HASH + Номер телефона",
+            font=("Arial", 9, "bold"),
+            text_color="#ffffff",
             anchor="w"
         ).pack(anchor="w", padx=10, pady=(0, 10))
 
@@ -278,18 +286,18 @@ class SetupWindow:
 
         self.phone_entry = self._create_field(
             self.mtproto_frame,
-            "Номер телефона (опционально):",
+            "Номер телефона:",
             "+1234567890",
-            "Только если хотите авторизоваться как User Account (для списка чатов)",
+            "Обязательно для экспорта истории! Формат: +1234567890",
             required=False
         )
 
-        # Поле для Bot Token (для обоих режимов)
+        # Поле для Bot Token (только для HTTP Bot API режима)
         self.bot_token_entry = self._create_field(
             parent,
-            "Bot Token:",
+            "Bot Token (только HTTP Bot API):",
             "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
-            "От @BotFather. Используйте БЕЗ номера телефона для работы с ботом",
+            "От @BotFather. Только для мониторинга НОВЫХ сообщений (история недоступна)",
             required=False
         )
 

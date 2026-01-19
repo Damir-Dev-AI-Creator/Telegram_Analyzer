@@ -112,6 +112,20 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
                         "- Bot Token (для работы через бота) ИЛИ\n"
                         "- Номер телефона (для User Account режима)")
 
+    # КРИТИЧНО: Bot Token не может экспортировать историю через MTProto API
+    if has_bot_token and not has_phone:
+        raise ValueError(
+            "⚠️ ОГРАНИЧЕНИЕ TELEGRAM API\n\n"
+            "Bot Token НЕ МОЖЕТ экспортировать историю сообщений!\n"
+            "Telegram запрещает ботам использовать GetHistoryRequest.\n\n"
+            "Для экспорта истории используйте User Account:\n"
+            "1. Откройте настройки\n"
+            "2. Удалите Bot Token\n"
+            "3. Укажите номер телефона (PHONE)\n"
+            "4. Сохраните и попробуйте снова\n\n"
+            "Подробнее: USER_ACCOUNT_GUIDE.md"
+        )
+
     # Парсинг дат
     parsed_start_date = None
     if start_date:

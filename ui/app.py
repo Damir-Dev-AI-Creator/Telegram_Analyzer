@@ -160,11 +160,21 @@ class YsellAnalyzerApp:
         ctk.CTkLabel(chat_input_frame, text="Ссылка на чат", width=140).pack(side="left")
         self.chat_entry = ctk.CTkEntry(
             chat_input_frame,
-            placeholder_text="https://t.me/...",
+            placeholder_text="https://t.me/... или -1001234567890 или @username",
             height=35
         )
         self.chat_entry.pack(side="left", fill="x", expand=True, padx=10)
         ClipboardManager.bind_shortcuts(self.chat_entry, self.root)
+
+        # Кнопка помощи для поиска chat_id
+        ctk.CTkButton(
+            chat_input_frame,
+            text="❓",
+            command=self._show_chat_id_help,
+            width=35,
+            height=35,
+            font=("Arial", 14)
+        ).pack(side="left")
 
         # Даты в одну строку
         dates_input_frame = ctk.CTkFrame(add_frame, fg_color="transparent")
@@ -1113,6 +1123,180 @@ class YsellAnalyzerApp:
 
         # Показываем уведомление
         self._set_status(f"✅ Выбран чат: {chat['title']}")
+
+    def _show_chat_id_help(self):
+        """Показать инструкцию по поиску chat_id"""
+        from core.config import USE_MTPROTO, BOT_TOKEN
+
+        # Создаем окно с инструкцией
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Как найти Chat ID?")
+        dialog.geometry("650x600")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Центрирование
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (650 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (600 // 2)
+        dialog.geometry(f'650x600+{x}+{y}')
+
+        # Заголовок
+        ctk.CTkLabel(
+            dialog,
+            text="📋 Как найти Chat ID канала?",
+            font=("Arial", 16, "bold")
+        ).pack(pady=15)
+
+        # Контент с инструкциями
+        content_frame = ctk.CTkScrollableFrame(dialog)
+        content_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+
+        help_text = """
+🎯 Chat ID - это числовой идентификатор канала/группы
+
+⚠️ ВАЖНО: Боты НЕ МОГУТ автоматически получать список своих чатов!
+Это ограничение Telegram API для безопасности.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 Метод 1: Через @userinfobot (Рекомендуется)
+
+1. Найдите бота @userinfobot в Telegram
+2. Перешлите любое сообщение из вашего канала этому боту
+3. Бот ответит информацией:
+
+   Chat: -1001234567890
+   Title: Название канала
+
+4. Скопируйте Chat ID: -1001234567890
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 Метод 2: Через веб-версию Telegram
+
+1. Откройте https://web.telegram.org
+2. Войдите в аккаунт
+3. Откройте нужный канал
+4. Посмотрите URL в адресной строке:
+
+   https://web.telegram.org/k/#-1001234567890
+
+5. Скопируйте числовой ID: -1001234567890
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Метод 3: Для публичных каналов
+
+Если канал ПУБЛИЧНЫЙ (имеет @username), можно использовать:
+
+• @channel_name
+• https://t.me/channel_name
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🤖 Метод 4: Через Bot API
+
+1. Откройте в браузере:
+   https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
+
+2. Замените <YOUR_TOKEN> на ваш Bot Token
+3. Найдите ваш канал в ответе JSON
+4. Скопируйте значение chat.id
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚙️ Совет: Ведите список каналов
+
+Создайте файл my_channels.txt со списком:
+
+-1001234567890  # Канал новостей
+-1009876543210  # Основной канал
+@public_channel # Публичный канал
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❗ НЕ ЗАБУДЬТЕ:
+
+✅ Бот должен быть добавлен в канал как администратор
+✅ У бота должны быть права "Просмотр сообщений"
+
+Без этого экспорт НЕ БУДЕТ работать!
+"""
+
+        # Текстовый виджет для инструкции
+        text_label = ctk.CTkLabel(
+            content_frame,
+            text=help_text,
+            font=("Courier New", 11),
+            justify="left",
+            anchor="w"
+        )
+        text_label.pack(fill="both", padx=10, pady=10)
+
+        # Дополнительная информация для режима MTProto с BOT
+        if USE_MTPROTO and BOT_TOKEN:
+            warning_frame = ctk.CTkFrame(dialog, fg_color="#ffc107")
+            warning_frame.pack(fill="x", padx=20, pady=10)
+
+            ctk.CTkLabel(
+                warning_frame,
+                text="⚠️ Вы используете MTProto с BOT_TOKEN",
+                font=("Arial", 11, "bold"),
+                text_color="black"
+            ).pack(pady=5)
+
+            ctk.CTkLabel(
+                warning_frame,
+                text="Список чатов недоступен, используйте методы выше для поиска chat_id",
+                font=("Arial", 9),
+                text_color="black",
+                wraplength=590
+            ).pack(pady=(0, 5))
+
+        # Кнопки
+        buttons_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        buttons_frame.pack(fill="x", padx=20, pady=10)
+
+        ctk.CTkButton(
+            buttons_frame,
+            text="📖 Открыть полную инструкцию",
+            command=lambda: self._open_bot_setup_guide(),
+            width=250,
+            height=35
+        ).pack(side="left", padx=5)
+
+        ctk.CTkButton(
+            buttons_frame,
+            text="Закрыть",
+            command=dialog.destroy,
+            width=150,
+            height=35,
+            fg_color="#666"
+        ).pack(side="right", padx=5)
+
+    def _open_bot_setup_guide(self):
+        """Открыть BOT_SETUP_GUIDE.md в браузере/текстовом редакторе"""
+        import webbrowser
+        import platform
+
+        guide_path = Path(__file__).parent.parent / "BOT_SETUP_GUIDE.md"
+
+        if guide_path.exists():
+            if platform.system() == 'Darwin':  # macOS
+                os.system(f'open "{guide_path}"')
+            elif platform.system() == 'Windows':
+                os.startfile(str(guide_path))
+            else:  # Linux
+                os.system(f'xdg-open "{guide_path}"')
+
+            self._set_status("📖 Открыта полная инструкция")
+        else:
+            messagebox.showinfo(
+                "Инструкция",
+                f"Файл инструкции находится по пути:\n{guide_path}\n\n"
+                "Откройте его в текстовом редакторе для подробной информации."
+            )
 
 
 def run_gui():

@@ -241,6 +241,25 @@ class SetupWindow:
         self.mtproto_frame = ctk.CTkFrame(parent, fg_color="transparent")
         self.mtproto_frame.pack(fill="x")
 
+        # Важная информация про Bot Token
+        info_box = ctk.CTkFrame(self.mtproto_frame, fg_color="#2b5278", corner_radius=8)
+        info_box.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(
+            info_box,
+            text="ℹ️ Для работы с Bot Token номер телефона НЕ нужен!",
+            font=("Arial", 11, "bold"),
+            anchor="w"
+        ).pack(anchor="w", padx=10, pady=(10, 5))
+
+        ctk.CTkLabel(
+            info_box,
+            text="Заполните: API_ID + API_HASH + Bot Token (без Phone)",
+            font=("Arial", 9),
+            text_color="#cccccc",
+            anchor="w"
+        ).pack(anchor="w", padx=10, pady=(0, 10))
+
         self.api_id_entry = self._create_field(
             self.mtproto_frame,
             "API ID:",
@@ -259,18 +278,18 @@ class SetupWindow:
 
         self.phone_entry = self._create_field(
             self.mtproto_frame,
-            "Номер телефона (для User Bot):",
+            "Номер телефона (опционально):",
             "+1234567890",
-            "Опционально: для авторизации как пользователь",
+            "Только если хотите авторизоваться как User Account (для списка чатов)",
             required=False
         )
 
         # Поле для Bot Token (для обоих режимов)
         self.bot_token_entry = self._create_field(
             parent,
-            "Bot Token (для Bot режима):",
+            "Bot Token:",
             "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
-            "Получите у @BotFather в Telegram (опционально в MTProto, обязательно в HTTP Bot API)",
+            "От @BotFather. Используйте БЕЗ номера телефона для работы с ботом",
             required=False
         )
 
@@ -400,13 +419,18 @@ class SetupWindow:
             bot_token = self.bot_token_entry.get().strip()
 
             if not phone and not bot_token:
-                errors.append("• Заполните хотя бы одно: Номер телефона или Bot Token")
+                errors.append("• Укажите Bot Token для работы с ботом (номер телефона не нужен)\n  Или укажите номер телефона для User Account режима")
 
             # Если указан телефон, валидируем его
             if phone:
                 valid, msg = validate_phone(phone)
                 if not valid:
                     errors.append(f"• Телефон: {msg}")
+
+            # Если указан bot_token, валидируем его
+            if bot_token:
+                if not ":" in bot_token:
+                    errors.append("• Bot Token должен содержать ':' (формат: 123456789:ABC...)")
 
         else:  # HTTP Bot API режим
             # HTTP режим: требуется только BOT_TOKEN

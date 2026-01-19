@@ -1,12 +1,12 @@
 # telegram.py
-"""Модуль для экспорта сообщений из Telegram (MTProto API - полный функционал)"""
+"""Модуль для экспорта сообщений из Telegram через User Account"""
 
 import csv
 import asyncio
 import re
 import logging
 from core.config import (
-    API_ID, API_HASH, PHONE, BOT_TOKEN, USE_MTPROTO,
+    API_ID, API_HASH, PHONE,
     EXCLUDE_USER_ID, EXCLUDE_USERNAME, EXPORT_FOLDER, SESSION_PATH
 )
 from datetime import datetime, timezone
@@ -54,8 +54,6 @@ def parse_chat_identifier(chat_input: str) -> str:
     # Если это URL
     if 't.me/' in chat_input or 'telegram.me/' in chat_input:
         # Извлекаем username из URL
-        # https://t.me/test_analyzer -> test_analyzer
-        # https://t.me/joinchat/ABC123 -> joinchat/ABC123 (приглашение)
         match = re.search(r't(?:elegram)?\.me/([a-zA-Z0-9_/]+)', chat_input)
         if match:
             username = match.group(1)
@@ -103,28 +101,8 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
     if not API_HASH or API_HASH.strip() == "":
         raise ValueError("API_HASH не настроен. Откройте настройки и введите API_HASH.")
 
-    # Проверка наличия хотя бы одного: PHONE или BOT_TOKEN
-    has_phone = PHONE and PHONE.strip() != ""
-    has_bot_token = BOT_TOKEN and BOT_TOKEN.strip() != ""
-
-    if not has_phone and not has_bot_token:
-        raise ValueError("Не настроен способ авторизации. Откройте настройки и введите:\n"
-                        "- Bot Token (для работы через бота) ИЛИ\n"
-                        "- Номер телефона (для User Account режима)")
-
-    # КРИТИЧНО: Bot Token не может экспортировать историю через MTProto API
-    if has_bot_token and not has_phone:
-        raise ValueError(
-            "⚠️ ОГРАНИЧЕНИЕ TELEGRAM API\n\n"
-            "Bot Token НЕ МОЖЕТ экспортировать историю сообщений!\n"
-            "Telegram запрещает ботам использовать GetHistoryRequest.\n\n"
-            "Для экспорта истории используйте User Account:\n"
-            "1. Откройте настройки\n"
-            "2. Удалите Bot Token\n"
-            "3. Укажите номер телефона (PHONE)\n"
-            "4. Сохраните и попробуйте снова\n\n"
-            "Подробнее: USER_ACCOUNT_GUIDE.md"
-        )
+    if not PHONE or PHONE.strip() == "":
+        raise ValueError("PHONE не настроен. Откройте настройки и введите номер телефона.")
 
     # Парсинг дат
     parsed_start_date = None
@@ -145,11 +123,9 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
 
     client = TelegramClient(str(SESSION_PATH), API_ID, API_HASH)
 
-    # Функции для авторизации (только для PHONE режима)
+    # Функции для авторизации
     async def code_callback():
-        """Callback для получения кода (только для User Account)"""
-        if not has_phone:
-            return None  # Не нужно для бота
+        """Callback для получения кода"""
         if code_handler:
             try:
                 code = await code_handler.get_code(PHONE)
@@ -161,9 +137,7 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
             return input('Введите код подтверждения: ')
 
     async def password_callback():
-        """Callback для получения пароля 2FA (только для User Account)"""
-        if not has_phone:
-            return None  # Не нужно для бота
+        """Callback для получения пароля 2FA"""
         if code_handler:
             try:
                 password = await code_handler.get_password()
@@ -175,19 +149,13 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
             return input('Введите пароль двухфакторной аутентификации: ')
 
     try:
-        # Авторизация: либо через BOT_TOKEN, либо через PHONE
-        if has_bot_token and not has_phone:
-            # Режим бота: используем bot_token
-            await client.start(bot_token=BOT_TOKEN)
-            logger.info("✅ Успешная авторизация в Telegram через Bot Token")
-        else:
-            # Режим User Account: используем phone
-            await client.start(
-                phone=PHONE,
-                code_callback=code_callback,
-                password=password_callback
-            )
-            logger.info("✅ Успешная авторизация в Telegram через номер телефона")
+        # Авторизация через номер телефона
+        await client.start(
+            phone=PHONE,
+            code_callback=code_callback,
+            password=password_callback
+        )
+        logger.info("✅ Успешная авторизация в Telegram")
 
         # Закрываем диалог авторизации после успешного входа
         if code_handler:
@@ -218,9 +186,9 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
             error_details = (
                 f"Не удалось найти чат: {parsed_chat}\n\n"
                 f"Возможные причины:\n"
-                f"1. Если используете BOT - добавьте бота в канал как админа\n"
-                f"2. Если канал приватный - вы должны быть участником\n"
-                f"3. Проверьте правильность ссылки/username\n\n"
+                f"1. Если канал приватный - вы должны быть участником\n"
+                f"2. Проверьте правильность ссылки/username\n"
+                f"3. Убедитесь, что у вас есть доступ к этому чату\n\n"
                 f"Исходная ссылка: {chat}\n"
                 f"Распознано как: {parsed_chat}\n"
                 f"Ошибка: {str(e)}"
@@ -307,21 +275,14 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
 
 async def get_user_chats():
     """
-    Получить список чатов пользователя (MTProto API + User Account)
+    Получить список чатов пользователя (User Account)
 
-    ⚠️ ОГРАНИЧЕНИЕ TELEGRAM API:
-    - Боты НЕ МОГУТ получать список своих чатов (GetDialogsRequest запрещен)
-    - Эта функция работает ТОЛЬКО с User Account (PHONE), НЕ с ботами!
-
-    Для работы требуется:
+    Требования:
     - API_ID, API_HASH
     - PHONE (номер телефона)
 
     Returns:
         List[dict]: Список чатов с информацией
-
-    Raises:
-        ValueError: Если используется BOT_TOKEN вместо PHONE
     """
     if not API_ID or API_ID == 0:
         raise ValueError("API_ID не настроен")
@@ -329,30 +290,19 @@ async def get_user_chats():
     if not API_HASH or API_HASH.strip() == "":
         raise ValueError("API_HASH не настроен")
 
-    # Проверка: работает ТОЛЬКО с User Account
-    if BOT_TOKEN and not PHONE:
-        raise ValueError(
-            "⚠️ ОГРАНИЧЕНИЕ API\n\n"
-            "Боты НЕ МОГУТ получать список чатов!\n"
-            "Telegram запрещает метод GetDialogsRequest для ботов.\n\n"
-            "Решения:\n"
-            "1. Используйте User Bot (укажите PHONE в настройках)\n"
-            "2. Или вводите chat_id/username вручную"
-        )
-
     if not PHONE or PHONE.strip() == "":
-        raise ValueError("PHONE не настроен. Эта функция работает только с User Account (номер телефона).")
+        raise ValueError("PHONE не настроен")
 
     client = TelegramClient(str(SESSION_PATH), API_ID, API_HASH)
 
     try:
-        # Авторизация как пользователь (User Bot)
+        # Авторизация как пользователь
         await client.start(phone=PHONE)
-        logger.info("✅ User Account авторизован (MTProto)")
+        logger.info("✅ User Account авторизован")
 
         chats = []
 
-        # Получение списка диалогов (работает только для User Account!)
+        # Получение списка диалогов
         async for dialog in client.iter_dialogs():
             # Фильтруем только группы и каналы
             if dialog.is_group or dialog.is_channel:
@@ -385,44 +335,6 @@ async def get_user_chats():
         await client.disconnect()
 
 
-async def export_with_mode_detection(chat: str, start_date: str = None, end_date: str = None,
-                                     limit: int = 10000, code_handler=None):
-    """
-    Универсальная функция экспорта с автоматическим выбором режима
-
-    Выбирает MTProto или HTTP Bot API в зависимости от конфигурации
-
-    Args:
-        chat: ID или username чата
-        start_date: Дата начала (работает только в MTProto)
-        end_date: Дата конца (работает только в MTProto)
-        limit: Максимальное количество сообщений
-        code_handler: Обработчик для получения кода авторизации (только MTProto)
-
-    Returns:
-        str: Имя созданного файла
-    """
-    if USE_MTPROTO:
-        logger.info("🚀 Используется MTProto API (полный функционал)")
-        return await export_telegram_csv(chat, start_date, end_date, limit, code_handler)
-    else:
-        logger.info("🤖 Используется HTTP Bot API (только новые сообщения)")
-
-        if start_date or end_date:
-            logger.warning("⚠️  Даты игнорируются в HTTP Bot API режиме (история недоступна)")
-
-        # Парсим идентификатор чата (поддержка URL)
-        parsed_chat = parse_chat_identifier(chat)
-        logger.info(f"HTTP Bot API: парсинг '{chat}' -> '{parsed_chat}'")
-
-        # Импорт здесь, чтобы избежать проблем если библиотека не установлена
-        from services.telegram_bot import export_telegram_bot_mode
-
-        # HTTP Bot API может работать с @username для публичных каналов
-        # или с числовым ID (для приватных или если бот добавлен)
-        return await export_telegram_bot_mode(parsed_chat, limit)
-
-
 if __name__ == "__main__":
     # Тестовый запуск
-    asyncio.run(export_telegram_csv("@ysellchat"))
+    asyncio.run(export_telegram_csv("@test_channel"))

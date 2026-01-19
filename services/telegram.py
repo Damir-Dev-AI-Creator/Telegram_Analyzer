@@ -34,6 +34,55 @@ def clean_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "", name).replace(" ", "_")
 
 
+def parse_chat_identifier(chat_input: str) -> str:
+    """
+    Парсинг идентификатора чата из различных форматов
+
+    Поддерживаемые форматы:
+    - https://t.me/username
+    - t.me/username
+    - @username
+    - username
+    - -1001234567890 (ID супергруппы)
+    - 1234567890 (ID канала)
+
+    Returns:
+        str: Очищенный идентификатор (@username или ID)
+    """
+    chat_input = chat_input.strip()
+
+    # Если это URL
+    if 't.me/' in chat_input or 'telegram.me/' in chat_input:
+        # Извлекаем username из URL
+        # https://t.me/test_analyzer -> test_analyzer
+        # https://t.me/joinchat/ABC123 -> joinchat/ABC123 (приглашение)
+        match = re.search(r't(?:elegram)?\.me/([a-zA-Z0-9_/]+)', chat_input)
+        if match:
+            username = match.group(1)
+            # Если это invite link
+            if username.startswith('joinchat/') or username.startswith('+'):
+                return chat_input  # Возвращаем полную ссылку для invite
+            # Добавляем @ если это username
+            if not username.startswith('-') and not username.isdigit():
+                return f"@{username}"
+            return username
+
+    # Если это уже username с @
+    if chat_input.startswith('@'):
+        return chat_input
+
+    # Если это числовой ID (с минусом или без)
+    if chat_input.lstrip('-').isdigit():
+        return int(chat_input)
+
+    # Если это просто username без @
+    if re.match(r'^[a-zA-Z][a-zA-Z0-9_]{4,}$', chat_input):
+        return f"@{chat_input}"
+
+    # Возвращаем как есть
+    return chat_input
+
+
 async def export_telegram_csv(chat: str, start_date: str = None, end_date: str = None, limit: int = 10000,
                               code_handler=None):
     """
@@ -130,7 +179,25 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
         raise Exception(error_msg)
 
     try:
-        entity = await client.get_entity(chat)
+        # Парсим идентификатор чата
+        parsed_chat = parse_chat_identifier(chat)
+        logger.info(f"Парсинг чата: '{chat}' -> '{parsed_chat}'")
+
+        try:
+            entity = await client.get_entity(parsed_chat)
+        except Exception as e:
+            error_details = (
+                f"Не удалось найти чат: {parsed_chat}\n\n"
+                f"Возможные причины:\n"
+                f"1. Если используете BOT - добавьте бота в канал как админа\n"
+                f"2. Если канал приватный - вы должны быть участником\n"
+                f"3. Проверьте правильность ссылки/username\n\n"
+                f"Исходная ссылка: {chat}\n"
+                f"Распознано как: {parsed_chat}\n"
+                f"Ошибка: {str(e)}"
+            )
+            logger.error(error_details)
+            raise ValueError(error_details)
 
         # Определяем имя чата для названия файла
         chat_title = getattr(entity, 'title', getattr(entity, 'username', 'chat'))

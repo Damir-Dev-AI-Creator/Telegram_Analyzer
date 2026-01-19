@@ -5,10 +5,14 @@ import customtkinter as ctk
 from tkinter import messagebox, END
 import asyncio
 import threading
+import logging
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
 import os
+
+# Настройка логирования
+logger = logging.getLogger(__name__)
 
 from core.config import (
     validate_config,
@@ -458,6 +462,7 @@ class YsellAnalyzerApp:
             self.root.after(0, lambda p=progress, c=chat_id, idx=i: self._update_export_progress(p,
                                                                                                  f"[{idx + 1}/{total}] Экспорт: {c}"))
 
+            loop = None
             try:
                 # Запуск экспорта с автоопределением режима
                 loop = asyncio.new_event_loop()
@@ -472,7 +477,6 @@ class YsellAnalyzerApp:
                         code_handler=code_handler
                     )
                 )
-                loop.close()
 
                 if result:
                     exported_files.append(result)
@@ -481,6 +485,26 @@ class YsellAnalyzerApp:
             except Exception as e:
                 errors.append(f"{chat_id}: {str(e)}")
                 self.root.after(0, lambda c=chat_id, err=str(e): self._set_status(f"❌ Ошибка {c}: {err}"))
+
+            finally:
+                # Безопасное закрытие event loop
+                if loop is not None:
+                    try:
+                        # Отменяем все незавершенные задачи
+                        pending = asyncio.all_tasks(loop)
+                        for task in pending:
+                            task.cancel()
+                        # Даем задачам завершиться
+                        if pending:
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        # Закрываем loop
+                        if not loop.is_closed():
+                            loop.close()
+                    except Exception as cleanup_error:
+                        logger.warning(f"Ошибка при закрытии event loop: {cleanup_error}")
+                    finally:
+                        # Сбрасываем event loop
+                        asyncio.set_event_loop(None)
 
         # Экспорт завершён
         self.root.after(0, lambda: self._update_export_progress(1.0, "Экспорт завершён"))

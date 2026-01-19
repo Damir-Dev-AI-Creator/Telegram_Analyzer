@@ -382,16 +382,16 @@ async def export_with_mode_detection(chat: str, start_date: str = None, end_date
         if start_date or end_date:
             logger.warning("⚠️  Даты игнорируются в HTTP Bot API режиме (история недоступна)")
 
+        # Парсим идентификатор чата (поддержка URL)
+        parsed_chat = parse_chat_identifier(chat)
+        logger.info(f"HTTP Bot API: парсинг '{chat}' -> '{parsed_chat}'")
+
         # Импорт здесь, чтобы избежать проблем если библиотека не установлена
         from services.telegram_bot import export_telegram_bot_mode
 
-        # Конвертация chat в ID если это строка
-        try:
-            chat_id = int(chat) if str(chat).lstrip('-').isdigit() else chat
-        except:
-            raise ValueError(f"В HTTP Bot API режиме нужен числовой ID чата, получено: {chat}")
-
-        return await export_telegram_bot_mode(chat_id, limit)
+        # HTTP Bot API может работать с @username для публичных каналов
+        # или с числовым ID (для приватных или если бот добавлен)
+        return await export_telegram_bot_mode(parsed_chat, limit)
 
 
 if __name__ == "__main__":

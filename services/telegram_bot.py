@@ -170,12 +170,12 @@ class TelegramBotMonitor:
         logger.info("⏹️  Мониторинг остановлен")
 
 
-async def export_telegram_bot_mode(chat_id: int, limit: int = 10000, duration_seconds: int = 3600) -> str:
+async def export_telegram_bot_mode(chat_identifier, limit: int = 10000, duration_seconds: int = 3600) -> str:
     """
     Экспорт сообщений через HTTP Bot API (только новые сообщения)
 
     Args:
-        chat_id: ID чата
+        chat_identifier: ID чата (int) или username (str с @ или без)
         limit: Максимальное количество сообщений
         duration_seconds: Длительность мониторинга в секундах
 
@@ -186,22 +186,44 @@ async def export_telegram_bot_mode(chat_id: int, limit: int = 10000, duration_se
     - НЕ может получить историю сообщений
     - Сохраняет только новые сообщения во время работы
     - Требует прав администратора в группах
+    - БОТ ДОЛЖЕН БЫТЬ ДОБАВЛЕН в канал!
     """
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN не настроен. Откройте настройки и введите токен от @BotFather.")
+
+    # Проверка доступа к чату перед мониторингом
+    bot = Bot(token=BOT_TOKEN)
+    try:
+        chat = await bot.get_chat(chat_identifier)
+        logger.info(f"✅ HTTP Bot API: доступ к чату '{chat.title or chat.username or chat_identifier}'")
+    except Exception as e:
+        error_msg = (
+            f"❌ HTTP Bot API: Не удалось получить доступ к чату\n\n"
+            f"Чат: {chat_identifier}\n"
+            f"Ошибка: {str(e)}\n\n"
+            f"⚠️ КРИТИЧНО для HTTP Bot API:\n"
+            f"1. БОТ ДОЛЖЕН быть добавлен в канал как администратор\n"
+            f"2. Для публичных каналов: добавьте бота через поиск\n"
+            f"3. Для приватных каналов: добавьте бота по ссылке приглашения\n"
+            f"4. Дайте боту права: 'Просмотр сообщений'\n\n"
+            f"Как добавить бота:\n"
+            f"• Откройте канал\n"
+            f"• Управление → Администраторы → Добавить\n"
+            f"• Найдите вашего бота и добавьте"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
     monitor = TelegramBotMonitor()
 
     # Запуск мониторинга с таймаутом
     try:
         async with asyncio.timeout(duration_seconds):
-            return await monitor.start_monitoring(chat_id, limit)
+            return await monitor.start_monitoring(chat_identifier, limit)
     except asyncio.TimeoutError:
         monitor.stop_monitoring()
         # Сохранение собранных сообщений
-        bot = Bot(token=BOT_TOKEN)
-        chat = await bot.get_chat(chat_id)
-        return await monitor._save_to_csv(chat_id, chat.title or str(chat_id))
+        return await monitor._save_to_csv(chat_identifier, chat.title or str(chat_identifier))
 
 
 if __name__ == "__main__":

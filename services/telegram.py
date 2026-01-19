@@ -209,14 +209,23 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
         await client.disconnect()
 
 
-async def get_bot_chats_mtproto():
+async def get_user_chats():
     """
-    Получить список чатов, где бот является участником (MTProto API)
+    Получить список чатов пользователя (MTProto API + User Account)
 
-    Работает только в MTProto режиме с BOT_TOKEN
+    ⚠️ ОГРАНИЧЕНИЕ TELEGRAM API:
+    - Боты НЕ МОГУТ получать список своих чатов (GetDialogsRequest запрещен)
+    - Эта функция работает ТОЛЬКО с User Account (PHONE), НЕ с ботами!
+
+    Для работы требуется:
+    - API_ID, API_HASH
+    - PHONE (номер телефона)
 
     Returns:
         List[dict]: Список чатов с информацией
+
+    Raises:
+        ValueError: Если используется BOT_TOKEN вместо PHONE
     """
     if not API_ID or API_ID == 0:
         raise ValueError("API_ID не настроен")
@@ -224,24 +233,35 @@ async def get_bot_chats_mtproto():
     if not API_HASH or API_HASH.strip() == "":
         raise ValueError("API_HASH не настроен")
 
-    if not BOT_TOKEN or BOT_TOKEN.strip() == "":
-        raise ValueError("BOT_TOKEN не настроен. Эта функция работает только с ботом.")
+    # Проверка: работает ТОЛЬКО с User Account
+    if BOT_TOKEN and not PHONE:
+        raise ValueError(
+            "⚠️ ОГРАНИЧЕНИЕ API\n\n"
+            "Боты НЕ МОГУТ получать список чатов!\n"
+            "Telegram запрещает метод GetDialogsRequest для ботов.\n\n"
+            "Решения:\n"
+            "1. Используйте User Bot (укажите PHONE в настройках)\n"
+            "2. Или вводите chat_id/username вручную"
+        )
+
+    if not PHONE or PHONE.strip() == "":
+        raise ValueError("PHONE не настроен. Эта функция работает только с User Account (номер телефона).")
 
     client = TelegramClient(str(SESSION_PATH), API_ID, API_HASH)
 
     try:
-        # Авторизация бота
-        await client.start(bot_token=BOT_TOKEN)
-        logger.info("✅ Бот авторизован (MTProto)")
+        # Авторизация как пользователь (User Bot)
+        await client.start(phone=PHONE)
+        logger.info("✅ User Account авторизован (MTProto)")
 
         chats = []
 
-        # Получение списка диалогов
+        # Получение списка диалогов (работает только для User Account!)
         async for dialog in client.iter_dialogs():
             # Фильтруем только группы и каналы
             if dialog.is_group or dialog.is_channel:
                 try:
-                    # Проверяем права бота
+                    # Проверяем права
                     permissions = await client.get_permissions(dialog.entity, 'me')
 
                     chat_info = {
@@ -250,7 +270,7 @@ async def get_bot_chats_mtproto():
                         'type': 'channel' if dialog.is_channel else 'group',
                         'username': getattr(dialog.entity, 'username', None),
                         'is_admin': permissions.is_admin,
-                        'can_read_history': True  # В MTProto с правами админа всегда можно
+                        'can_read_history': True
                     }
 
                     chats.append(chat_info)

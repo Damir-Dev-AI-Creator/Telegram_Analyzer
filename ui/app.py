@@ -137,13 +137,13 @@ class YsellAnalyzerApp:
             font=("Arial", 13, "bold")
         ).pack(side="left")
 
-        # Кнопка загрузки чатов бота (только для MTProto с BOT_TOKEN)
-        from core.config import USE_MTPROTO, BOT_TOKEN
-        if USE_MTPROTO and BOT_TOKEN:
+        # Кнопка загрузки чатов (только для MTProto с PHONE - User Account)
+        from core.config import USE_MTPROTO, PHONE
+        if USE_MTPROTO and PHONE:
             ctk.CTkButton(
                 add_header,
-                text="📋 Чаты бота",
-                command=self._load_bot_chats,
+                text="📋 Мои чаты",
+                command=self._load_user_chats,
                 width=120,
                 height=30,
                 font=("Arial", 11)
@@ -949,9 +949,9 @@ class YsellAnalyzerApp:
     # ФУНКЦИИ ДЛЯ РАБОТЫ С БОТОМ
     # =========================================================================
 
-    def _load_bot_chats(self):
-        """Загрузить список чатов, где бот является участником"""
-        from core.config import USE_MTPROTO, BOT_TOKEN
+    def _load_user_chats(self):
+        """Загрузить список чатов пользователя (User Account)"""
+        from core.config import USE_MTPROTO, PHONE
 
         if not USE_MTPROTO:
             messagebox.showwarning(
@@ -961,42 +961,44 @@ class YsellAnalyzerApp:
             )
             return
 
-        if not BOT_TOKEN:
+        if not PHONE:
             messagebox.showwarning(
-                "BOT_TOKEN не настроен",
-                "Для получения списка чатов нужен Bot Token.\n\n"
-                "Настройте BOT_TOKEN в настройках приложения."
+                "PHONE не настроен",
+                "⚠️ ОГРАНИЧЕНИЕ API\n\n"
+                "Для получения списка чатов нужен User Account (PHONE).\n\n"
+                "Боты НЕ МОГУТ получать список чатов!\n"
+                "Telegram запрещает это для ботов.\n\n"
+                "Решение: Укажите PHONE в настройках приложения."
             )
             return
 
-        self._set_status("⏳ Загрузка чатов бота...")
+        self._set_status("⏳ Загрузка ваших чатов...")
 
         # Запуск в отдельном потоке
-        thread = threading.Thread(target=self._run_load_bot_chats, daemon=True)
+        thread = threading.Thread(target=self._run_load_user_chats, daemon=True)
         thread.start()
 
-    def _run_load_bot_chats(self):
-        """Выполнение загрузки чатов бота (в отдельном потоке)"""
-        from services.telegram import get_bot_chats_mtproto
+    def _run_load_user_chats(self):
+        """Выполнение загрузки чатов пользователя (в отдельном потоке)"""
+        from services.telegram import get_user_chats
 
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-            chats = loop.run_until_complete(get_bot_chats_mtproto())
+            chats = loop.run_until_complete(get_user_chats())
             loop.close()
 
             if not chats:
                 self.root.after(0, lambda: messagebox.showinfo(
                     "Нет чатов",
-                    "Бот не добавлен ни в какие группы или каналы.\n\n"
-                    "Добавьте бота в нужные чаты и попробуйте снова."
+                    "Вы не состоите ни в каких группах или каналах."
                 ))
-                self.root.after(0, lambda: self._set_status("ℹ️ Нет чатов бота"))
+                self.root.after(0, lambda: self._set_status("ℹ️ Нет чатов"))
                 return
 
             # Показываем диалог выбора чата
-            self.root.after(0, lambda c=chats: self._show_bot_chats_dialog(c))
+            self.root.after(0, lambda c=chats: self._show_chats_dialog(c))
             self.root.after(0, lambda: self._set_status(f"✅ Найдено чатов: {len(chats)}"))
 
         except Exception as e:
@@ -1004,8 +1006,8 @@ class YsellAnalyzerApp:
             self.root.after(0, lambda: messagebox.showerror("Ошибка", f"Не удалось загрузить чаты:\n\n{error_msg}"))
             self.root.after(0, lambda: self._set_status(f"❌ Ошибка загрузки чатов"))
 
-    def _show_bot_chats_dialog(self, chats):
-        """Показать диалог выбора чата из списка чатов бота"""
+    def _show_chats_dialog(self, chats):
+        """Показать диалог выбора чата из списка"""
         # Создаем новое окно
         dialog = ctk.CTkToplevel(self.root)
         dialog.title("Выберите чат")
@@ -1022,7 +1024,7 @@ class YsellAnalyzerApp:
         # Заголовок
         ctk.CTkLabel(
             dialog,
-            text="📋 Чаты, где бот является участником",
+            text="📋 Ваши чаты (группы и каналы)",
             font=("Arial", 16, "bold")
         ).pack(pady=15)
 

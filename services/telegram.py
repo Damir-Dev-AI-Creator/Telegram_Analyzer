@@ -103,8 +103,14 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
     if not API_HASH or API_HASH.strip() == "":
         raise ValueError("API_HASH не настроен. Откройте настройки и введите API_HASH.")
 
-    if not PHONE or PHONE.strip() == "":
-        raise ValueError("PHONE не настроен. Откройте настройки и введите номер телефона.")
+    # Проверка наличия хотя бы одного: PHONE или BOT_TOKEN
+    has_phone = PHONE and PHONE.strip() != ""
+    has_bot_token = BOT_TOKEN and BOT_TOKEN.strip() != ""
+
+    if not has_phone and not has_bot_token:
+        raise ValueError("Не настроен способ авторизации. Откройте настройки и введите:\n"
+                        "- Bot Token (для работы через бота) ИЛИ\n"
+                        "- Номер телефона (для User Account режима)")
 
     # Парсинг дат
     parsed_start_date = None
@@ -125,9 +131,11 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
 
     client = TelegramClient(str(SESSION_PATH), API_ID, API_HASH)
 
-    # Функции для авторизации
+    # Функции для авторизации (только для PHONE режима)
     async def code_callback():
-        """Callback для получения кода"""
+        """Callback для получения кода (только для User Account)"""
+        if not has_phone:
+            return None  # Не нужно для бота
         if code_handler:
             try:
                 code = await code_handler.get_code(PHONE)
@@ -139,7 +147,9 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
             return input('Введите код подтверждения: ')
 
     async def password_callback():
-        """Callback для получения пароля 2FA"""
+        """Callback для получения пароля 2FA (только для User Account)"""
+        if not has_phone:
+            return None  # Не нужно для бота
         if code_handler:
             try:
                 password = await code_handler.get_password()
@@ -151,14 +161,19 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
             return input('Введите пароль двухфакторной аутентификации: ')
 
     try:
-        # ИСПРАВЛЕНО: правильное использование параметра password
-        await client.start(
-            phone=PHONE,
-            code_callback=code_callback,
-            password=password_callback  # ✅ ИСПРАВЛЕНО: было password_callback без скобок
-        )
-
-        logger.info("✅ Успешная авторизация в Telegram")
+        # Авторизация: либо через BOT_TOKEN, либо через PHONE
+        if has_bot_token and not has_phone:
+            # Режим бота: используем bot_token
+            await client.start(bot_token=BOT_TOKEN)
+            logger.info("✅ Успешная авторизация в Telegram через Bot Token")
+        else:
+            # Режим User Account: используем phone
+            await client.start(
+                phone=PHONE,
+                code_callback=code_callback,
+                password=password_callback
+            )
+            logger.info("✅ Успешная авторизация в Telegram через номер телефона")
 
         # Закрываем диалог авторизации после успешного входа
         if code_handler:

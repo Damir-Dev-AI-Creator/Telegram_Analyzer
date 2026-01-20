@@ -114,20 +114,6 @@ class YsellAnalyzerApp:
             font=("Arial", 18, "bold")
         ).pack(side="left")
 
-        # Индикатор режима
-        from core.config import USE_MTPROTO
-        mode_text = "MTProto" if USE_MTPROTO else "HTTP Bot API"
-        mode_color = "#28a745" if USE_MTPROTO else "#ffc107"
-
-        self.mode_indicator = ctk.CTkLabel(
-            header_frame,
-            text=f"🔧 {mode_text}",
-            font=("Arial", 11, "bold"),
-            text_color=mode_color,
-            corner_radius=5
-        )
-        self.mode_indicator.pack(side="right", padx=10)
-
         # === Блок добавления чата ===
         add_frame = ctk.CTkFrame(main_frame, corner_radius=10)
         add_frame.pack(fill="x", pady=(0, 15))
@@ -141,17 +127,15 @@ class YsellAnalyzerApp:
             font=("Arial", 13, "bold")
         ).pack(side="left")
 
-        # Кнопка загрузки чатов (только для MTProto с PHONE - User Account)
-        from core.config import USE_MTPROTO, PHONE
-        if USE_MTPROTO and PHONE:
-            ctk.CTkButton(
-                add_header,
-                text="📋 Мои чаты",
-                command=self._load_user_chats,
-                width=120,
-                height=30,
-                font=("Arial", 11)
-            ).pack(side="right")
+        # Кнопка загрузки чатов
+        ctk.CTkButton(
+            add_header,
+            text="📋 Мои чаты",
+            command=self._load_user_chats,
+            width=120,
+            height=30,
+            font=("Arial", 11)
+        ).pack(side="right")
 
         # Chat ID
         chat_input_frame = ctk.CTkFrame(add_frame, fg_color="transparent")
@@ -453,16 +437,15 @@ class YsellAnalyzerApp:
 
     def _run_batch_export(self, analyze_after: bool):
         """Выполнение пакетного экспорта (в отдельном потоке)"""
-        from services.telegram import export_with_mode_detection
+        from services.telegram import export_telegram_csv
         from ui.auth_dialog import TelegramCodeHandler
-        from core.config import USE_MTPROTO
 
         total = len(self.chat_list)
         exported_files = []
         errors = []
 
-        # Создаём обработчик авторизации один раз (только для MTProto с PHONE)
-        code_handler = TelegramCodeHandler(self.root) if USE_MTPROTO else None
+        # Создаём обработчик авторизации один раз
+        code_handler = TelegramCodeHandler(self.root)
 
         for i, item in enumerate(self.chat_list):
             chat_id = item['chat_id']
@@ -479,7 +462,7 @@ class YsellAnalyzerApp:
                 asyncio.set_event_loop(loop)
 
                 result = loop.run_until_complete(
-                    export_with_mode_detection(
+                    export_telegram_csv(
                         chat=chat_id,
                         start_date=item['start_date'],
                         end_date=item['end_date'],
@@ -985,15 +968,7 @@ class YsellAnalyzerApp:
 
     def _load_user_chats(self):
         """Загрузить список чатов пользователя (User Account)"""
-        from core.config import USE_MTPROTO, PHONE
-
-        if not USE_MTPROTO:
-            messagebox.showwarning(
-                "Недоступно",
-                "Список чатов доступен только в MTProto режиме.\n\n"
-                "HTTP Bot API не поддерживает получение списка чатов."
-            )
-            return
+        from core.config import PHONE
 
         if not PHONE:
             messagebox.showwarning(
@@ -1126,8 +1101,6 @@ class YsellAnalyzerApp:
 
     def _show_chat_id_help(self):
         """Показать инструкцию по поиску chat_id"""
-        from core.config import USE_MTPROTO, BOT_TOKEN
-
         # Создаем окно с инструкцией
         dialog = ctk.CTkToplevel(self.root)
         dialog.title("Как найти Chat ID?")
@@ -1155,8 +1128,8 @@ class YsellAnalyzerApp:
         help_text = """
 🎯 Chat ID - это числовой идентификатор канала/группы
 
-⚠️ ВАЖНО: Боты НЕ МОГУТ автоматически получать список своих чатов!
-Это ограничение Telegram API для безопасности.
+💡 Самый простой способ: нажмите кнопку "📋 Мои чаты"
+   чтобы увидеть все доступные вам чаты!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1195,17 +1168,6 @@ class YsellAnalyzerApp:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-🤖 Метод 4: Через Bot API
-
-1. Откройте в браузере:
-   https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
-
-2. Замените <YOUR_TOKEN> на ваш Bot Token
-3. Найдите ваш канал в ответе JSON
-4. Скопируйте значение chat.id
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 ⚙️ Совет: Ведите список каналов
 
 Создайте файл my_channels.txt со списком:
@@ -1216,12 +1178,11 @@ class YsellAnalyzerApp:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-❗ НЕ ЗАБУДЬТЕ:
+✅ Вы используете User Account режим:
 
-✅ Бот должен быть добавлен в канал как администратор
-✅ У бота должны быть права "Просмотр сообщений"
-
-Без этого экспорт НЕ БУДЕТ работать!
+• Можете экспортировать любой чат, где вы участник
+• Доступен полный список ваших чатов через кнопку "📋 Мои чаты"
+• Работает с приватными и публичными каналами
 """
 
         # Текстовый виджет для инструкции
@@ -1233,26 +1194,6 @@ class YsellAnalyzerApp:
             anchor="w"
         )
         text_label.pack(fill="both", padx=10, pady=10)
-
-        # Дополнительная информация для режима MTProto с BOT
-        if USE_MTPROTO and BOT_TOKEN:
-            warning_frame = ctk.CTkFrame(dialog, fg_color="#ffc107")
-            warning_frame.pack(fill="x", padx=20, pady=10)
-
-            ctk.CTkLabel(
-                warning_frame,
-                text="⚠️ Вы используете MTProto с BOT_TOKEN",
-                font=("Arial", 11, "bold"),
-                text_color="black"
-            ).pack(pady=5)
-
-            ctk.CTkLabel(
-                warning_frame,
-                text="Список чатов недоступен, используйте методы выше для поиска chat_id",
-                font=("Arial", 9),
-                text_color="black",
-                wraplength=590
-            ).pack(pady=(0, 5))
 
         # Кнопки
         buttons_frame = ctk.CTkFrame(dialog, fg_color="transparent")

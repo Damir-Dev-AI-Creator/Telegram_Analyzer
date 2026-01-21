@@ -1,0 +1,33 @@
+# Environment
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Local data
+data/
+*.db
+*.sqlite
+.encryption_key
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# User files
+*.session
+*.session-journal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log

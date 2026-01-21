@@ -236,7 +236,23 @@ class YsellAnalyzerBot:
         """Запуск бота"""
         logger.info("🤖 Запуск Ysell Analyzer Bot...")
         logger.info("✅ Бот готов к работе!")
-        self.application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+        # Для Windows - устанавливаем правильную event loop policy
+        import asyncio
+        if os.name == 'nt':  # Windows
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+        # Запускаем бота
+        try:
+            self.application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True
+            )
+        except KeyboardInterrupt:
+            logger.info("\n👋 Бот остановлен пользователем")
+        except Exception as e:
+            logger.error(f"Ошибка при работе бота: {e}")
+            raise
 
 
 def main():

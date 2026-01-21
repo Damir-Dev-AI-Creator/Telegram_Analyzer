@@ -12,11 +12,108 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-# Добавляем путь к services
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from services.analyzer import ClaudeAnalyzer
+# Импорты для анализа
+import csv
+import pandas as pd
+from anthropic import Anthropic
+from docx import Document
+from docx.shared import Pt, RGBColor, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 logger = logging.getLogger(__name__)
+
+
+class SimpleClaudeAnalyzer:
+    """Простой анализатор с Claude AI без зависимостей от services"""
+
+    def __init__(self, api_key: str):
+        self.client = Anthropic(api_key=api_key)
+        self.model = "claude-sonnet-4-20250514"
+
+    def analyze_and_generate_report(self, csv_file: str, output_file: str) -> str:
+        """
+        Анализ CSV файла и генерация DOCX отчета
+
+        Args:
+            csv_file: Путь к CSV файлу
+            output_file: Путь для сохранения DOCX
+
+        Returns:
+            str: Путь к созданному DOCX файлу
+        """
+        # Читаем CSV
+        df = pd.read_csv(csv_file, encoding='utf-8')
+
+        # Подготавливаем данные для анализа
+        messages_text = "\n".join([
+            f"[{row['Date']}] {row['From']}: {row['Text']}"
+            for _, row in df.head(3000).iterrows()
+        ])
+
+        # Создаем промпт
+        prompt = f"""Проанализируй следующие сообщения из Telegram чата и создай детальный отчет.
+
+СООБЩЕНИЯ:
+{messages_text}
+
+Создай структурированный анализ, включающий:
+1. Общая статистика и обзор
+2. Ключевые темы обсуждений
+3. Основные участники и их роли
+4. Тренды и паттерны
+5. Важные инсайты и выводы
+
+Формат ответа: структурированный текст с заголовками."""
+
+        # Отправляем запрос к Claude
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=4096,
+            messages=[{
+                "role": "user",
+                "content": prompt
+            }]
+        )
+
+        analysis_text = response.content[0].text
+
+        # Создаем DOCX отчет
+        doc = Document()
+
+        # Заголовок
+        title = doc.add_heading('Анализ Telegram переписки', 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Дата создания
+        date_para = doc.add_paragraph(f'Дата создания: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+        date_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        doc.add_paragraph()  # Пустая строка
+
+        # Статистика
+        stats_heading = doc.add_heading('📊 Статистика', 1)
+        doc.add_paragraph(f'Всего сообщений: {len(df):,}')
+        doc.add_paragraph(f'Уникальных авторов: {df["From"].nunique():,}')
+        doc.add_paragraph(f'Период: {df["Date"].min()} - {df["Date"].max()}')
+
+        doc.add_paragraph()
+
+        # Анализ от Claude
+        analysis_heading = doc.add_heading('🤖 Анализ Claude AI', 1)
+
+        # Разбиваем анализ на параграфы
+        for line in analysis_text.split('\n'):
+            if line.strip():
+                if line.startswith('#'):
+                    # Это заголовок
+                    level = line.count('#')
+                    doc.add_heading(line.replace('#', '').strip(), level)
+                else:
+                    doc.add_paragraph(line.strip())
+
+        # Сохраняем
+        doc.save(output_file)
+        return output_file
 
 
 class AnalysisHandler:
@@ -196,7 +293,7 @@ class AnalysisHandler:
             )
 
             # Создаем анализатор
-            analyzer = ClaudeAnalyzer(api_key=claude_api_key)
+            analyzer = SimpleClaudeAnalyzer(api_key=claude_api_key)
 
             # Генерируем имя выходного файла
             output_dir = Path(__file__).parent.parent / "data" / "reports" / str(user_id)

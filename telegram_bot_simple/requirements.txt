@@ -1,12 +1,22 @@
 # Telegram Bot
 python-telegram-bot>=21.0,<22.0
 
-# Existing dependencies (from main app)
+# Telegram Client for export
 telethon>=1.42.0
+
+# Claude AI
 anthropic>=0.76.0
+
+# Data processing
 pandas>=2.3.0
+
+# Document generation
 python-docx>=1.2.0
+
+# Configuration
 python-dotenv>=1.2.0
+
+# Encryption
 cryptography>=42.0.0
 
 # Optional: for building .exe

@@ -12,11 +12,94 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-# Добавляем путь к services
-sys.path.append(str(Path(__file__).parent.parent.parent))
-from services.telegram import TelegramExporter
+# Добавляем путь к корневой директории проекта
+root_dir = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(root_dir))
+
+# Импортируем необходимые компоненты
+from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError
+import csv
 
 logger = logging.getLogger(__name__)
+
+
+class SimpleTelegramExporter:
+    """Простой экспортер Telegram чатов без зависимостей от core.config"""
+
+    def __init__(self, api_id: int, api_hash: str, phone: str, session_file: str):
+        self.api_id = api_id
+        self.api_hash = api_hash
+        self.phone = phone
+        self.session_file = session_file
+        self.client = None
+
+    async def export_chat(self, chat_identifier: str, output_file: str,
+                         date_from=None, date_to=None):
+        """
+        Экспорт сообщений из чата
+
+        Args:
+            chat_identifier: @username или ID чата
+            output_file: Путь для сохранения CSV
+            date_from: Дата начала (datetime)
+            date_to: Дата окончания (datetime)
+
+        Returns:
+            str: Путь к созданному файлу
+        """
+        self.client = TelegramClient(self.session_file, self.api_id, self.api_hash)
+
+        try:
+            await self.client.start(phone=self.phone)
+
+            # Получаем сущность чата
+            entity = await self.client.get_entity(chat_identifier)
+
+            # Открываем CSV для записи
+            with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(['Date', 'From', 'Text'])
+
+                # Получаем сообщения
+                async for message in self.client.iter_messages(
+                    entity,
+                    offset_date=date_to,
+                    reverse=True
+                ):
+                    # Проверяем дату
+                    if date_from and message.date < date_from:
+                        continue
+                    if date_to and message.date > date_to:
+                        break
+
+                    # Получаем текст
+                    text = message.text or message.message or ''
+                    if not text:
+                        continue
+
+                    # Получаем отправителя
+                    sender_name = 'Unknown'
+                    if message.sender:
+                        if hasattr(message.sender, 'first_name'):
+                            sender_name = message.sender.first_name or 'Unknown'
+                            if hasattr(message.sender, 'last_name') and message.sender.last_name:
+                                sender_name += f' {message.sender.last_name}'
+                        elif hasattr(message.sender, 'title'):
+                            sender_name = message.sender.title
+
+                    # Записываем в CSV
+                    writer.writerow([
+                        message.date.strftime('%Y-%m-%d %H:%M:%S'),
+                        sender_name,
+                        text.replace('\n', ' ')
+                    ])
+
+            return output_file
+
+        finally:
+            if self.client:
+                await self.client.disconnect()
 
 
 class ExportHandler:
@@ -184,7 +267,7 @@ class ExportHandler:
             )
 
             # Создаем экспортер
-            exporter = TelegramExporter(
+            exporter = SimpleTelegramExporter(
                 api_id=int(settings['telegram_api_id']),
                 api_hash=settings['telegram_api_hash'],
                 phone=settings['telegram_phone'],

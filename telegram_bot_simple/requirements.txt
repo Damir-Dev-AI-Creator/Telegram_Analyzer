@@ -1,5 +1,5 @@
-# Telegram Bot
-python-telegram-bot>=21.0,<22.0
+# Telegram Bot - используем стабильную версию
+python-telegram-bot[job-queue]==21.7
 
 # Telegram Client for export
 telethon>=1.42.0

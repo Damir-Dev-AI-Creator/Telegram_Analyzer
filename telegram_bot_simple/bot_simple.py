@@ -237,12 +237,7 @@ class YsellAnalyzerBot:
         logger.info("🤖 Запуск Ysell Analyzer Bot...")
         logger.info("✅ Бот готов к работе!")
 
-        # Для Windows - устанавливаем правильную event loop policy
-        import asyncio
-        if os.name == 'nt':  # Windows
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-        # Запускаем бота
+        # Запускаем бота - python-telegram-bot сам управляет event loop
         try:
             self.application.run_polling(
                 allowed_updates=Update.ALL_TYPES,

@@ -252,6 +252,8 @@ class YsellAnalyzerBot:
 
 def main():
     """Главная функция для запуска бота"""
+    import asyncio
+
     print("""
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
@@ -298,9 +300,18 @@ def main():
     print("\n" + "=" * 60 + "\n")
 
     try:
+        # Создаем и настраиваем event loop
+        if sys.platform == 'win32':
+            # Для Windows используем ProactorEventLoop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
         # Создание и запуск бота
         bot = YsellAnalyzerBot(bot_token)
         bot.run()
+    except KeyboardInterrupt:
+        logger.info("\n👋 Бот остановлен пользователем")
+        print("\n\n👋 Бот остановлен")
     except Exception as e:
         logger.error(f"Ошибка запуска бота: {e}")
         print(f"\n❌ Ошибка: {e}")

@@ -119,9 +119,14 @@ def is_configured() -> bool:
 
 def get_missing_vars() -> list:
     """Получить список отсутствующих переменных"""
-    required_vars = ['API_ID', 'API_HASH', 'PHONE', 'CLAUDE_API_KEY']
     missing = []
 
+    # Claude API всегда обязателен
+    if not os.getenv('CLAUDE_API_KEY') or os.getenv('CLAUDE_API_KEY').strip() == "":
+        missing.append('CLAUDE_API_KEY')
+
+    # Telegram API (всегда используем User Account)
+    required_vars = ['API_ID', 'API_HASH', 'PHONE']
     for var in required_vars:
         value = os.getenv(var)
         if not value or value.strip() == "":
@@ -151,7 +156,7 @@ def _get_str(key: str, default: str = "") -> str:
     return value.strip() if value else default
 
 
-# Основные параметры
+# Основные параметры (только User Account)
 API_ID: int = _get_int("API_ID", 0)
 API_HASH: str = _get_str("API_HASH", "")
 PHONE: str = _get_str("PHONE", "")
@@ -180,6 +185,9 @@ def validate_config() -> Tuple[bool, str]:
     if missing:
         return False, f"Отсутствуют переменные: {', '.join(missing)}"
 
+    if not CLAUDE_API_KEY:
+        return False, "CLAUDE_API_KEY не настроен"
+
     if API_ID == 0:
         return False, "API_ID не настроен или имеет неверный формат"
 
@@ -188,9 +196,6 @@ def validate_config() -> Tuple[bool, str]:
 
     if not PHONE:
         return False, "PHONE не настроен"
-
-    if not CLAUDE_API_KEY:
-        return False, "CLAUDE_API_KEY не настроен"
 
     return True, "Конфигурация валидна"
 
@@ -211,25 +216,33 @@ def reload_config():
 
 
 def save_config(
-        api_id: str,
-        api_hash: str,
-        phone: str,
         claude_api_key: str,
+        api_id: str = "",
+        api_hash: str = "",
+        phone: str = "",
         exclude_user_id: str = "0",
         exclude_username: str = ""
 ) -> None:
     """Сохранение конфигурации в .env файл"""
-    env_content = f"""# Telegram API Configuration
-# Получите на https://my.telegram.org/apps
+    env_content = f"""# ============================================
+# Telegram API Configuration (User Account)
+# ============================================
+# Получите API_ID и API_HASH на https://my.telegram.org/apps
 API_ID={api_id}
 API_HASH={api_hash}
+
+# Ваш номер телефона в международном формате
 PHONE={phone}
 
+# ============================================
 # Claude API Configuration (Anthropic)
+# ============================================
 # Получите на https://console.anthropic.com/settings/keys
 CLAUDE_API_KEY={claude_api_key}
 
+# ============================================
 # Optional Settings
+# ============================================
 EXCLUDE_USER_ID={exclude_user_id}
 EXCLUDE_USERNAME={exclude_username}
 """

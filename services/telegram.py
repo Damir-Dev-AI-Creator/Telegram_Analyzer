@@ -1,11 +1,14 @@
 # telegram.py
-"""Модуль для экспорта сообщений из Telegram"""
+"""Модуль для экспорта сообщений из Telegram через User Account"""
 
 import csv
 import asyncio
 import re
 import logging
-from core.config import API_ID, API_HASH, PHONE, EXCLUDE_USER_ID, EXCLUDE_USERNAME, EXPORT_FOLDER, SESSION_PATH
+from core.config import (
+    API_ID, API_HASH, PHONE,
+    EXCLUDE_USER_ID, EXCLUDE_USERNAME, EXPORT_FOLDER, SESSION_PATH
+)
 from datetime import datetime, timezone
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
@@ -29,6 +32,53 @@ DAYS_RU = {
 def clean_filename(name):
     """Очистка имени чата для использования в названии файла"""
     return re.sub(r'[\\/*?:"<>|]', "", name).replace(" ", "_")
+
+
+def parse_chat_identifier(chat_input: str) -> str:
+    """
+    Парсинг идентификатора чата из различных форматов
+
+    Поддерживаемые форматы:
+    - https://t.me/username
+    - t.me/username
+    - @username
+    - username
+    - -1001234567890 (ID супергруппы)
+    - 1234567890 (ID канала)
+
+    Returns:
+        str: Очищенный идентификатор (@username или ID)
+    """
+    chat_input = chat_input.strip()
+
+    # Если это URL
+    if 't.me/' in chat_input or 'telegram.me/' in chat_input:
+        # Извлекаем username из URL
+        match = re.search(r't(?:elegram)?\.me/([a-zA-Z0-9_/]+)', chat_input)
+        if match:
+            username = match.group(1)
+            # Если это invite link
+            if username.startswith('joinchat/') or username.startswith('+'):
+                return chat_input  # Возвращаем полную ссылку для invite
+            # Добавляем @ если это username
+            if not username.startswith('-') and not username.isdigit():
+                return f"@{username}"
+            return username
+
+    # Если это уже username с @
+    if chat_input.startswith('@'):
+        return chat_input
+
+    # Если это числовой ID (с минусом или без)
+    if chat_input.lstrip('-').isdigit():
+        return int(chat_input)
+
+    # Если это просто username без @
+    if re.match(r'^[a-zA-Z][a-zA-Z0-9_]{4,}$', chat_input):
+        return f"@{chat_input}"
+
+    # Возвращаем как есть
+    return chat_input
 
 
 async def export_telegram_csv(chat: str, start_date: str = None, end_date: str = None, limit: int = 10000,
@@ -99,13 +149,12 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
             return input('Введите пароль двухфакторной аутентификации: ')
 
     try:
-        # ИСПРАВЛЕНО: правильное использование параметра password
+        # Авторизация через номер телефона
         await client.start(
             phone=PHONE,
             code_callback=code_callback,
-            password=password_callback  # ✅ ИСПРАВЛЕНО: было password_callback без скобок
+            password=password_callback
         )
-
         logger.info("✅ Успешная авторизация в Telegram")
 
         # Закрываем диалог авторизации после успешного входа
@@ -127,7 +176,25 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
         raise Exception(error_msg)
 
     try:
-        entity = await client.get_entity(chat)
+        # Парсим идентификатор чата
+        parsed_chat = parse_chat_identifier(chat)
+        logger.info(f"Парсинг чата: '{chat}' -> '{parsed_chat}'")
+
+        try:
+            entity = await client.get_entity(parsed_chat)
+        except Exception as e:
+            error_details = (
+                f"Не удалось найти чат: {parsed_chat}\n\n"
+                f"Возможные причины:\n"
+                f"1. Если канал приватный - вы должны быть участником\n"
+                f"2. Проверьте правильность ссылки/username\n"
+                f"3. Убедитесь, что у вас есть доступ к этому чату\n\n"
+                f"Исходная ссылка: {chat}\n"
+                f"Распознано как: {parsed_chat}\n"
+                f"Ошибка: {str(e)}"
+            )
+            logger.error(error_details)
+            raise ValueError(error_details)
 
         # Определяем имя чата для названия файла
         chat_title = getattr(entity, 'title', getattr(entity, 'username', 'chat'))
@@ -206,6 +273,68 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
         await client.disconnect()
 
 
+async def get_user_chats():
+    """
+    Получить список чатов пользователя (User Account)
+
+    Требования:
+    - API_ID, API_HASH
+    - PHONE (номер телефона)
+
+    Returns:
+        List[dict]: Список чатов с информацией
+    """
+    if not API_ID or API_ID == 0:
+        raise ValueError("API_ID не настроен")
+
+    if not API_HASH or API_HASH.strip() == "":
+        raise ValueError("API_HASH не настроен")
+
+    if not PHONE or PHONE.strip() == "":
+        raise ValueError("PHONE не настроен")
+
+    client = TelegramClient(str(SESSION_PATH), API_ID, API_HASH)
+
+    try:
+        # Авторизация как пользователь
+        await client.start(phone=PHONE)
+        logger.info("✅ User Account авторизован")
+
+        chats = []
+
+        # Получение списка диалогов
+        async for dialog in client.iter_dialogs():
+            # Фильтруем только группы и каналы
+            if dialog.is_group or dialog.is_channel:
+                try:
+                    # Проверяем права
+                    permissions = await client.get_permissions(dialog.entity, 'me')
+
+                    chat_info = {
+                        'id': dialog.id,
+                        'title': dialog.title,
+                        'type': 'channel' if dialog.is_channel else 'group',
+                        'username': getattr(dialog.entity, 'username', None),
+                        'is_admin': permissions.is_admin,
+                        'can_read_history': True
+                    }
+
+                    chats.append(chat_info)
+                    logger.info(f"Найден чат: {chat_info['title']} (admin: {chat_info['is_admin']})")
+
+                except Exception as e:
+                    logger.warning(f"Не удалось получить информацию о чате {dialog.title}: {e}")
+
+        logger.info(f"📋 Найдено чатов: {len(chats)}")
+        return chats
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка получения списка чатов: {e}")
+        raise
+    finally:
+        await client.disconnect()
+
+
 if __name__ == "__main__":
     # Тестовый запуск
-    asyncio.run(export_telegram_csv("@ysellchat"))
+    asyncio.run(export_telegram_csv("@test_channel"))

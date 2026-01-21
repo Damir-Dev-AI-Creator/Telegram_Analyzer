@@ -186,32 +186,32 @@ class SetupWindow:
         return entry
     
     def _create_telegram_section(self, parent):
-        """Секция Telegram API"""
+        """Секция Telegram API (User Account)"""
         self._create_section_header(
             parent,
-            "📱 Telegram API",
+            "📱 Telegram API (User Account)",
             "https://my.telegram.org/apps"
         )
-        
+
         self.api_id_entry = self._create_field(
             parent,
             "API ID:",
             "12345678",
-            "Числовой идентификатор приложения"
+            "Получите на https://my.telegram.org/apps"
         )
-        
+
         self.api_hash_entry = self._create_field(
             parent,
             "API Hash:",
             "abcdef1234567890abcdef1234567890",
             "Хеш приложения (32 символа)"
         )
-        
+
         self.phone_entry = self._create_field(
             parent,
             "Номер телефона:",
             "+1234567890",
-            "В международном формате с +"
+            "Ваш номер в международном формате (например: +1234567890)"
         )
     
     def _create_claude_section(self, parent):
@@ -302,69 +302,70 @@ class SetupWindow:
     def _validate(self) -> bool:
         """Валидация полей"""
         errors = []
-        
-        # API ID
-        api_id = self.api_id_entry.get().strip()
-        if not api_id:
-            errors.append("• API ID не может быть пустым")
-        elif not api_id.isdigit():
-            errors.append("• API ID должен быть числом")
-        
-        # API Hash
-        api_hash = self.api_hash_entry.get().strip()
-        valid, msg = validate_api_hash(api_hash)
-        if not valid:
-            errors.append(f"• API Hash: {msg}")
-        
-        # Phone
-        phone = self.phone_entry.get().strip()
-        valid, msg = validate_phone(phone)
-        if not valid:
-            errors.append(f"• Телефон: {msg}")
-        
+
         # Claude API
         claude_key = self.claude_entry.get().strip()
         if not claude_key:
             errors.append("• Claude API Key не может быть пустым")
         elif not claude_key.startswith("sk-ant-"):
             errors.append("• Claude API Key должен начинаться с 'sk-ant-'")
-        
+
+        # Telegram API
+        api_id = self.api_id_entry.get().strip()
+        if not api_id:
+            errors.append("• API ID не может быть пустым")
+        elif not api_id.isdigit():
+            errors.append("• API ID должен быть числом")
+
+        api_hash = self.api_hash_entry.get().strip()
+        valid, msg = validate_api_hash(api_hash)
+        if not valid:
+            errors.append(f"• API Hash: {msg}")
+
+        phone = self.phone_entry.get().strip()
+        if not phone:
+            errors.append("• Номер телефона не может быть пустым")
+        else:
+            valid, msg = validate_phone(phone)
+            if not valid:
+                errors.append(f"• Телефон: {msg}")
+
         if errors:
             messagebox.showerror(
                 "Ошибка валидации",
                 "Исправьте следующие ошибки:\n\n" + "\n".join(errors)
             )
             return False
-        
+
         return True
     
     def _save_config(self):
         """Сохранение конфигурации"""
         if not self._validate():
             return
-        
+
         try:
             save_config(
+                claude_api_key=self.claude_entry.get().strip(),
                 api_id=self.api_id_entry.get().strip(),
                 api_hash=self.api_hash_entry.get().strip(),
                 phone=self.phone_entry.get().strip(),
-                claude_api_key=self.claude_entry.get().strip(),
                 exclude_user_id=self.exclude_id_entry.get().strip() or "0",
                 exclude_username=self.exclude_name_entry.get().strip() or ""
             )
-            
+
             messagebox.showinfo(
                 "Успех!",
-                "✅ Конфигурация успешно сохранена!\n\n"
+                f"✅ Конфигурация успешно сохранена!\n\n"
                 f"Файл: {get_env_path()}\n\n"
                 "Приложение готово к работе."
             )
-            
+
             self.window.destroy()
-            
+
             if self.on_complete:
                 self.on_complete()
-                
+
         except Exception as e:
             messagebox.showerror(
                 "Ошибка",

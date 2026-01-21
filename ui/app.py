@@ -5,10 +5,14 @@ import customtkinter as ctk
 from tkinter import messagebox, END
 import asyncio
 import threading
+import logging
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
 import os
+
+# Настройка логирования
+logger = logging.getLogger(__name__)
 
 from core.config import (
     validate_config,
@@ -100,22 +104,38 @@ class YsellAnalyzerApp:
         main_frame = ctk.CTkFrame(self.tab_export, fg_color="transparent")
         main_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        # Заголовок
+        # Заголовок с индикатором режима
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 15))
+
         ctk.CTkLabel(
-            main_frame,
+            header_frame,
             text="Экспорт сообщений из Telegram",
             font=("Arial", 18, "bold")
-        ).pack(pady=(0, 15))
+        ).pack(side="left")
 
         # === Блок добавления чата ===
         add_frame = ctk.CTkFrame(main_frame, corner_radius=10)
         add_frame.pack(fill="x", pady=(0, 15))
 
+        add_header = ctk.CTkFrame(add_frame, fg_color="transparent")
+        add_header.pack(fill="x", pady=(15, 10), padx=15)
+
         ctk.CTkLabel(
-            add_frame,
+            add_header,
             text="➕ Добавить чат для экспорта",
             font=("Arial", 13, "bold")
-        ).pack(pady=(15, 10))
+        ).pack(side="left")
+
+        # Кнопка загрузки чатов
+        ctk.CTkButton(
+            add_header,
+            text="📋 Мои чаты",
+            command=self._load_user_chats,
+            width=120,
+            height=30,
+            font=("Arial", 11)
+        ).pack(side="right")
 
         # Chat ID
         chat_input_frame = ctk.CTkFrame(add_frame, fg_color="transparent")
@@ -124,11 +144,21 @@ class YsellAnalyzerApp:
         ctk.CTkLabel(chat_input_frame, text="Ссылка на чат", width=140).pack(side="left")
         self.chat_entry = ctk.CTkEntry(
             chat_input_frame,
-            placeholder_text="https://t.me/...",
+            placeholder_text="https://t.me/... или -1001234567890 или @username",
             height=35
         )
         self.chat_entry.pack(side="left", fill="x", expand=True, padx=10)
         ClipboardManager.bind_shortcuts(self.chat_entry, self.root)
+
+        # Кнопка помощи для поиска chat_id
+        ctk.CTkButton(
+            chat_input_frame,
+            text="❓",
+            command=self._show_chat_id_help,
+            width=35,
+            height=35,
+            font=("Arial", 14)
+        ).pack(side="left")
 
         # Даты в одну строку
         dates_input_frame = ctk.CTkFrame(add_frame, fg_color="transparent")
@@ -425,8 +455,9 @@ class YsellAnalyzerApp:
             self.root.after(0, lambda p=progress, c=chat_id, idx=i: self._update_export_progress(p,
                                                                                                  f"[{idx + 1}/{total}] Экспорт: {c}"))
 
+            loop = None
             try:
-                # Запуск экспорта
+                # Запуск экспорта с автоопределением режима
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
@@ -439,7 +470,6 @@ class YsellAnalyzerApp:
                         code_handler=code_handler
                     )
                 )
-                loop.close()
 
                 if result:
                     exported_files.append(result)
@@ -448,6 +478,26 @@ class YsellAnalyzerApp:
             except Exception as e:
                 errors.append(f"{chat_id}: {str(e)}")
                 self.root.after(0, lambda c=chat_id, err=str(e): self._set_status(f"❌ Ошибка {c}: {err}"))
+
+            finally:
+                # Безопасное закрытие event loop
+                if loop is not None:
+                    try:
+                        # Отменяем все незавершенные задачи
+                        pending = asyncio.all_tasks(loop)
+                        for task in pending:
+                            task.cancel()
+                        # Даем задачам завершиться
+                        if pending:
+                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        # Закрываем loop
+                        if not loop.is_closed():
+                            loop.close()
+                    except Exception as cleanup_error:
+                        logger.warning(f"Ошибка при закрытии event loop: {cleanup_error}")
+                    finally:
+                        # Сбрасываем event loop
+                        asyncio.set_event_loop(None)
 
         # Экспорт завершён
         self.root.after(0, lambda: self._update_export_progress(1.0, "Экспорт завершён"))
@@ -911,6 +961,283 @@ class YsellAnalyzerApp:
     def _set_status(self, text: str):
         """Установить текст статуса"""
         self.status_label.configure(text=text)
+
+    # =========================================================================
+    # ФУНКЦИИ ДЛЯ РАБОТЫ С БОТОМ
+    # =========================================================================
+
+    def _load_user_chats(self):
+        """Загрузить список чатов пользователя (User Account)"""
+        from core.config import PHONE
+
+        if not PHONE:
+            messagebox.showwarning(
+                "PHONE не настроен",
+                "⚠️ ОГРАНИЧЕНИЕ API\n\n"
+                "Для получения списка чатов нужен User Account (PHONE).\n\n"
+                "Боты НЕ МОГУТ получать список чатов!\n"
+                "Telegram запрещает это для ботов.\n\n"
+                "Решение: Укажите PHONE в настройках приложения."
+            )
+            return
+
+        self._set_status("⏳ Загрузка ваших чатов...")
+
+        # Запуск в отдельном потоке
+        thread = threading.Thread(target=self._run_load_user_chats, daemon=True)
+        thread.start()
+
+    def _run_load_user_chats(self):
+        """Выполнение загрузки чатов пользователя (в отдельном потоке)"""
+        from services.telegram import get_user_chats
+
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            chats = loop.run_until_complete(get_user_chats())
+            loop.close()
+
+            if not chats:
+                self.root.after(0, lambda: messagebox.showinfo(
+                    "Нет чатов",
+                    "Вы не состоите ни в каких группах или каналах."
+                ))
+                self.root.after(0, lambda: self._set_status("ℹ️ Нет чатов"))
+                return
+
+            # Показываем диалог выбора чата
+            self.root.after(0, lambda c=chats: self._show_chats_dialog(c))
+            self.root.after(0, lambda: self._set_status(f"✅ Найдено чатов: {len(chats)}"))
+
+        except Exception as e:
+            error_msg = str(e)
+            self.root.after(0, lambda: messagebox.showerror("Ошибка", f"Не удалось загрузить чаты:\n\n{error_msg}"))
+            self.root.after(0, lambda: self._set_status(f"❌ Ошибка загрузки чатов"))
+
+    def _show_chats_dialog(self, chats):
+        """Показать диалог выбора чата из списка"""
+        # Создаем новое окно
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Выберите чат")
+        dialog.geometry("600x500")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Центрирование окна
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (600 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (500 // 2)
+        dialog.geometry(f'600x500+{x}+{y}')
+
+        # Заголовок
+        ctk.CTkLabel(
+            dialog,
+            text="📋 Ваши чаты (группы и каналы)",
+            font=("Arial", 16, "bold")
+        ).pack(pady=15)
+
+        # Список чатов
+        list_frame = ctk.CTkScrollableFrame(dialog)
+        list_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+
+        for chat in chats:
+            chat_frame = ctk.CTkFrame(list_frame, corner_radius=8)
+            chat_frame.pack(fill="x", pady=5)
+
+            # Информация о чате
+            info_frame = ctk.CTkFrame(chat_frame, fg_color="transparent")
+            info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+
+            title = f"{'📢' if chat['type'] == 'channel' else '👥'} {chat['title']}"
+            ctk.CTkLabel(
+                info_frame,
+                text=title,
+                font=("Arial", 13, "bold"),
+                anchor="w"
+            ).pack(anchor="w")
+
+            details = f"ID: {chat['id']}"
+            if chat.get('username'):
+                details += f" | @{chat['username']}"
+            details += f" | {'✅ Админ' if chat['is_admin'] else '⚠️ Не админ'}"
+
+            ctk.CTkLabel(
+                info_frame,
+                text=details,
+                font=("Arial", 9),
+                text_color="gray",
+                anchor="w"
+            ).pack(anchor="w")
+
+            # Кнопка добавления
+            ctk.CTkButton(
+                chat_frame,
+                text="➕",
+                width=40,
+                command=lambda c=chat, d=dialog: self._add_chat_from_list(c, d)
+            ).pack(side="right", padx=10)
+
+        # Кнопка закрытия
+        ctk.CTkButton(
+            dialog,
+            text="Закрыть",
+            command=dialog.destroy,
+            width=200
+        ).pack(pady=10)
+
+    def _add_chat_from_list(self, chat, dialog):
+        """Добавить чат из списка в очередь"""
+        # Вставляем ID или username в поле
+        chat_identifier = f"@{chat['username']}" if chat.get('username') else str(chat['id'])
+        self.chat_entry.delete(0, END)
+        self.chat_entry.insert(0, chat_identifier)
+
+        # Закрываем диалог
+        dialog.destroy()
+
+        # Показываем уведомление
+        self._set_status(f"✅ Выбран чат: {chat['title']}")
+
+    def _show_chat_id_help(self):
+        """Показать инструкцию по поиску chat_id"""
+        # Создаем окно с инструкцией
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("Как найти Chat ID?")
+        dialog.geometry("650x600")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Центрирование
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (650 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (600 // 2)
+        dialog.geometry(f'650x600+{x}+{y}')
+
+        # Заголовок
+        ctk.CTkLabel(
+            dialog,
+            text="📋 Как найти Chat ID канала?",
+            font=("Arial", 16, "bold")
+        ).pack(pady=15)
+
+        # Контент с инструкциями
+        content_frame = ctk.CTkScrollableFrame(dialog)
+        content_frame.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+
+        help_text = """
+🎯 Chat ID - это числовой идентификатор канала/группы
+
+💡 Самый простой способ: нажмите кнопку "📋 Мои чаты"
+   чтобы увидеть все доступные вам чаты!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 Метод 1: Через @userinfobot (Рекомендуется)
+
+1. Найдите бота @userinfobot в Telegram
+2. Перешлите любое сообщение из вашего канала этому боту
+3. Бот ответит информацией:
+
+   Chat: -1001234567890
+   Title: Название канала
+
+4. Скопируйте Chat ID: -1001234567890
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 Метод 2: Через веб-версию Telegram
+
+1. Откройте https://web.telegram.org
+2. Войдите в аккаунт
+3. Откройте нужный канал
+4. Посмотрите URL в адресной строке:
+
+   https://web.telegram.org/k/#-1001234567890
+
+5. Скопируйте числовой ID: -1001234567890
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Метод 3: Для публичных каналов
+
+Если канал ПУБЛИЧНЫЙ (имеет @username), можно использовать:
+
+• @channel_name
+• https://t.me/channel_name
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚙️ Совет: Ведите список каналов
+
+Создайте файл my_channels.txt со списком:
+
+-1001234567890  # Канал новостей
+-1009876543210  # Основной канал
+@public_channel # Публичный канал
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Вы используете User Account режим:
+
+• Можете экспортировать любой чат, где вы участник
+• Доступен полный список ваших чатов через кнопку "📋 Мои чаты"
+• Работает с приватными и публичными каналами
+"""
+
+        # Текстовый виджет для инструкции
+        text_label = ctk.CTkLabel(
+            content_frame,
+            text=help_text,
+            font=("Courier New", 11),
+            justify="left",
+            anchor="w"
+        )
+        text_label.pack(fill="both", padx=10, pady=10)
+
+        # Кнопки
+        buttons_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        buttons_frame.pack(fill="x", padx=20, pady=10)
+
+        ctk.CTkButton(
+            buttons_frame,
+            text="📖 Открыть полную инструкцию",
+            command=lambda: self._open_bot_setup_guide(),
+            width=250,
+            height=35
+        ).pack(side="left", padx=5)
+
+        ctk.CTkButton(
+            buttons_frame,
+            text="Закрыть",
+            command=dialog.destroy,
+            width=150,
+            height=35,
+            fg_color="#666"
+        ).pack(side="right", padx=5)
+
+    def _open_bot_setup_guide(self):
+        """Открыть USER_ACCOUNT_GUIDE.md в браузере/текстовом редакторе"""
+        import webbrowser
+        import platform
+
+        guide_path = Path(__file__).parent.parent / "USER_ACCOUNT_GUIDE.md"
+
+        if guide_path.exists():
+            if platform.system() == 'Darwin':  # macOS
+                os.system(f'open "{guide_path}"')
+            elif platform.system() == 'Windows':
+                os.startfile(str(guide_path))
+            else:  # Linux
+                os.system(f'xdg-open "{guide_path}"')
+
+            self._set_status("📖 Открыта полная инструкция")
+        else:
+            messagebox.showinfo(
+                "Инструкция",
+                f"Файл инструкции находится по пути:\n{guide_path}\n\n"
+                "Откройте его в текстовом редакторе для подробной информации."
+            )
 
 
 def run_gui():

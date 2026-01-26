@@ -7,6 +7,7 @@ from aiogram.types import Message
 import logging
 
 from core.queue import task_queue, TaskType
+from core.chat_utils import parse_chat_identifier, get_chat_help_text
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +37,24 @@ async def cmd_export(message: Message):
         await message.answer(
             "❌ <b>Неверный формат команды</b>\n\n"
             "<b>Использование:</b>\n"
-            "<code>/export CHAT_ID</code>\n\n"
-            "<b>Примеры:</b>\n"
-            "<code>/export -1001234567890</code>\n"
-            "<code>/export @channelname</code>\n"
-            "<code>/export https://t.me/channelname</code>\n\n"
+            "<code>/export CHAT</code>\n\n"
+            f"{get_chat_help_text()}\n\n"
             "Используйте /help для подробных инструкций."
         )
         return
 
-    chat_id = args[1].strip()
+    chat_input = args[1].strip()
+
+    # Парсинг и валидация идентификатора чата
+    try:
+        chat_id = parse_chat_identifier(chat_input)
+    except ValueError as e:
+        await message.answer(
+            f"❌ <b>Неверный формат идентификатора чата</b>\n\n"
+            f"Ошибка: {str(e)}\n\n"
+            f"{get_chat_help_text()}"
+        )
+        return
 
     logger.info(f"User {message.from_user.id} requested export for chat: {chat_id}")
 
@@ -63,10 +72,13 @@ async def cmd_export(message: Message):
         )
 
         # Сразу ответить пользователю
+        from core.chat_utils import format_chat_identifier_for_display
+        display_chat = format_chat_identifier_for_display(chat_input)
+
         await message.answer(
             f"✅ <b>Задача создана!</b>\n\n"
             f"🆔 Задача: #{task_id}\n"
-            f"📱 Чат: <code>{chat_id}</code>\n"
+            f"📱 Чат: <code>{display_chat}</code>\n"
             f"📅 Период: За все время\n"
             f"📊 Лимит: 10,000 сообщений\n\n"
             f"⏳ Экспорт начнется в течение нескольких секунд.\n"
@@ -89,7 +101,9 @@ async def cmd_export(message: Message):
 async def cmd_export_fallback(message: Message):
     """Fallback для неправильного формата команды /export"""
     await message.answer(
-        "❌ Неверный формат. Используйте:\n"
-        "<code>/export CHAT_ID</code>\n\n"
+        "❌ <b>Неверный формат команды</b>\n\n"
+        "<b>Использование:</b>\n"
+        "<code>/export CHAT</code>\n\n"
+        f"{get_chat_help_text()}\n\n"
         "Подробности: /help"
     )

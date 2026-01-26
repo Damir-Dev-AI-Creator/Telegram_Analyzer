@@ -9,6 +9,7 @@ import os
 
 from core.queue import task_queue, TaskType
 from core.config import EXPORT_FOLDER
+from core.chat_utils import parse_chat_identifier, get_chat_help_text, format_chat_identifier_for_display
 
 logger = logging.getLogger(__name__)
 
@@ -160,11 +161,8 @@ async def cmd_export_analyze(message: Message):
         await message.answer(
             "❌ <b>Неверный формат команды</b>\n\n"
             "<b>Использование:</b>\n"
-            "<code>/exportanalyze CHAT_ID</code>\n\n"
-            "<b>Примеры:</b>\n"
-            "<code>/exportanalyze -1001234567890</code>\n"
-            "<code>/exportanalyze @channelname</code>\n"
-            "<code>/exportanalyze https://t.me/channelname</code>\n\n"
+            "<code>/exportanalyze CHAT</code>\n\n"
+            f"{get_chat_help_text()}\n\n"
             "<b>Что делает команда:</b>\n"
             "1. Экспортирует чат в CSV\n"
             "2. Анализирует через Claude API\n"
@@ -173,7 +171,18 @@ async def cmd_export_analyze(message: Message):
         )
         return
 
-    chat_id = args[1].strip()
+    chat_input = args[1].strip()
+
+    # Парсинг и валидация идентификатора чата
+    try:
+        chat_id = parse_chat_identifier(chat_input)
+    except ValueError as e:
+        await message.answer(
+            f"❌ <b>Неверный формат идентификатора чата</b>\n\n"
+            f"Ошибка: {str(e)}\n\n"
+            f"{get_chat_help_text()}"
+        )
+        return
 
     logger.info(f"User {message.from_user.id} requested export+analyze for chat: {chat_id}")
 
@@ -191,10 +200,12 @@ async def cmd_export_analyze(message: Message):
         )
 
         # Сразу ответить пользователю
+        display_chat = format_chat_identifier_for_display(chat_input)
+
         await message.answer(
             f"✅ <b>Задача создана!</b>\n\n"
             f"🆔 Задача: #{task_id}\n"
-            f"📱 Чат: <code>{chat_id}</code>\n\n"
+            f"📱 Чат: <code>{display_chat}</code>\n\n"
             f"<b>📋 План выполнения:</b>\n"
             f"1️⃣ Экспорт чата в CSV (~30 сек)\n"
             f"2️⃣ Анализ через Claude API (~1-3 мин)\n\n"
@@ -229,7 +240,9 @@ async def cmd_analyze_fallback(message: Message):
 async def cmd_exportanalyze_fallback(message: Message):
     """Fallback для неправильного формата команды /exportanalyze"""
     await message.answer(
-        "❌ Неверный формат. Используйте:\n"
-        "<code>/exportanalyze CHAT_ID</code>\n\n"
+        "❌ <b>Неверный формат команды</b>\n\n"
+        "<b>Использование:</b>\n"
+        "<code>/exportanalyze CHAT</code>\n\n"
+        f"{get_chat_help_text()}\n\n"
         "Подробности: /help"
     )

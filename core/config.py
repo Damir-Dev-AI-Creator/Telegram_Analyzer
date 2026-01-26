@@ -161,6 +161,10 @@ CLAUDE_API_KEY: str = _get_str("CLAUDE_API_KEY", "")
 EXCLUDE_USER_ID: int = _get_int("EXCLUDE_USER_ID", 0)
 EXCLUDE_USERNAME: str = _get_str("EXCLUDE_USERNAME", "")
 
+# Telegram Bot параметры (опциональные, для работы бота)
+BOT_TOKEN: str = _get_str("BOT_TOKEN", "")
+OWNER_ID: int = _get_int("OWNER_ID", 0)
+
 # Пути (используем кросс-платформенные)
 EXPORT_FOLDER: str = str(get_input_folder())
 OUTPUT_FOLDER: str = str(get_output_folder())
@@ -199,6 +203,7 @@ def reload_config():
     """Перезагрузка конфигурации из .env файла"""
     global API_ID, API_HASH, PHONE, CLAUDE_API_KEY
     global EXCLUDE_USER_ID, EXCLUDE_USERNAME
+    global BOT_TOKEN, OWNER_ID
 
     load_dotenv(get_env_path(), override=True)
 
@@ -208,6 +213,8 @@ def reload_config():
     CLAUDE_API_KEY = _get_str("CLAUDE_API_KEY", "")
     EXCLUDE_USER_ID = _get_int("EXCLUDE_USER_ID", 0)
     EXCLUDE_USERNAME = _get_str("EXCLUDE_USERNAME", "")
+    BOT_TOKEN = _get_str("BOT_TOKEN", "")
+    OWNER_ID = _get_int("OWNER_ID", 0)
 
 
 def save_config(

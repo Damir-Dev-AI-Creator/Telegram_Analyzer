@@ -117,11 +117,22 @@ def is_configured() -> bool:
     return get_env_path().exists()
 
 
-def get_missing_vars() -> list:
-    """Получить список отсутствующих переменных"""
-    required_vars = ['API_ID', 'API_HASH', 'PHONE', 'CLAUDE_API_KEY']
-    missing = []
+def get_missing_vars(mode: str = "legacy") -> list:
+    """
+    Получить список отсутствующих переменных
 
+    Args:
+        mode: "bot" для multi-user бота (только BOT_TOKEN),
+              "legacy" для GUI/CLI (API_ID, API_HASH, etc)
+    """
+    if mode == "bot":
+        # Для бота нужен только BOT_TOKEN
+        required_vars = ['BOT_TOKEN']
+    else:
+        # Для legacy GUI/CLI режима
+        required_vars = ['API_ID', 'API_HASH', 'PHONE', 'CLAUDE_API_KEY']
+
+    missing = []
     for var in required_vars:
         value = os.getenv(var)
         if not value or value.strip() == "":
@@ -175,15 +186,31 @@ SESSION_PATH: str = str(get_session_path())
 # Валидация
 # ============================================================================
 
-def validate_config() -> Tuple[bool, str]:
-    """Валидация конфигурации"""
+def validate_config(mode: str = "legacy") -> Tuple[bool, str]:
+    """
+    Валидация конфигурации
+
+    Args:
+        mode: "bot" для multi-user бота,
+              "legacy" для GUI/CLI режима
+    """
     if not is_configured():
+        # Для бота .env необязателен, создастся автоматически
+        if mode == "bot":
+            return True, "Bot mode: .env will be created automatically"
         return False, "Файл конфигурации не найден"
 
-    missing = get_missing_vars()
+    missing = get_missing_vars(mode)
     if missing:
         return False, f"Отсутствуют переменные: {', '.join(missing)}"
 
+    # Для режима бота проверяем только BOT_TOKEN
+    if mode == "bot":
+        if not BOT_TOKEN:
+            return False, "BOT_TOKEN не настроен"
+        return True, "Bot configuration valid"
+
+    # Для legacy режима проверяем все переменные
     if API_ID == 0:
         return False, "API_ID не настроен или имеет неверный формат"
 

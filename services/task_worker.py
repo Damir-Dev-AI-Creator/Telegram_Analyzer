@@ -9,7 +9,8 @@ from aiogram import Bot
 from aiogram.types import FSInputFile
 
 from core.queue import task_queue, Task, TaskType, TaskStatus
-from core.config import BOT_TOKEN, EXPORT_FOLDER, OUTPUT_FOLDER
+from core.config import BOT_TOKEN
+from core.db_manager import get_db_manager
 from services.telegram import export_telegram_csv
 from services.analyzer import analyze_csv_with_claude, save_to_docx
 
@@ -99,21 +100,21 @@ class TaskWorker:
                 f"📊 Лимит: {limit:,} сообщений"
             )
 
-            # Выполнить экспорт
-            logger.info(f"Запуск экспорта для задачи #{task.task_id}")
-            result_filename = await export_telegram_csv(
+            # Выполнить экспорт (per-user)
+            logger.info(f"Starting export for task #{task.task_id}, user {user_id}")
+            file_path = await export_telegram_csv(
+                user_id=user_id,
                 chat=chat_id,
                 start_date=start_date,
                 end_date=end_date,
                 limit=limit
             )
 
-            # Отправить файл
-            file_path = os.path.join(EXPORT_FOLDER, result_filename)
-
+            # file_path теперь полный путь к файлу
             if not os.path.exists(file_path):
-                raise FileNotFoundError(f"Файл не найден: {file_path}")
+                raise FileNotFoundError(f"File not found: {file_path}")
 
+            filename = os.path.basename(file_path)
             document = FSInputFile(file_path)
             await self.bot.send_document(
                 user_id,
@@ -122,12 +123,12 @@ class TaskWorker:
                     f"✅ <b>Экспорт завершен!</b>\n\n"
                     f"🆔 Задача: #{task.task_id}\n"
                     f"📱 Чат: <code>{chat_id}</code>\n"
-                    f"📄 Файл: <code>{result_filename}</code>"
+                    f"📄 Файл: <code>{filename}</code>"
                 )
             )
 
             await task_queue.mark_completed(task.task_id)
-            logger.info(f"✅ Задача #{task.task_id} завершена успешно")
+            logger.info(f"✅ Task #{task.task_id} completed successfully")
 
         except Exception as e:
             logger.error(f"❌ Ошибка при экспорте задачи #{task.task_id}: {e}", exc_info=True)
@@ -154,6 +155,19 @@ class TaskWorker:
         filename = task.data.get('filename', 'unknown.csv')
 
         try:
+            # Получить пользователя и его Claude API ключ
+            db = get_db_manager()
+            user = await db.get_user(user_id)
+
+            if not user:
+                raise ValueError(f"User {user_id} not found")
+
+            if not user.claude_api_key:
+                raise ValueError(
+                    f"Claude API key not configured for user {user_id}. "
+                    f"Please configure it using /settings command."
+                )
+
             # Уведомление о начале
             await self.bot.send_message(
                 user_id,
@@ -163,27 +177,33 @@ class TaskWorker:
                 f"⏳ Отправляю данные в Claude API..."
             )
 
-            # Выполнить анализ через Claude API
-            logger.info(f"Запуск анализа для задачи #{task.task_id}")
+            # Выполнить анализ через Claude API с per-user ключом
+            logger.info(f"Starting analysis for task #{task.task_id}, user {user_id}")
 
             # Запустить анализ в отдельном потоке (т.к. analyze_csv_with_claude синхронный)
             loop = asyncio.get_event_loop()
             analysis_text = await loop.run_in_executor(
                 None,
                 analyze_csv_with_claude,
-                file_path
+                file_path,
+                user.claude_api_key  # Per-user Claude API key
             )
 
-            # Создать DOCX файл
-            output_filename = filename.replace('.csv', '_analysis.docx')
-            output_path = os.path.join(OUTPUT_FOLDER, output_filename)
+            # Создать DOCX файл в per-user папке
+            base_filename = os.path.basename(filename)
+            output_filename = base_filename.replace('.csv', '_analysis.docx')
+
+            # Per-user папка для анализов
+            user_output_folder = os.path.join("data", "users", str(user_id), "analysis")
+            os.makedirs(user_output_folder, exist_ok=True)
+            output_path = os.path.join(user_output_folder, output_filename)
 
             await loop.run_in_executor(
                 None,
                 save_to_docx,
                 analysis_text,
                 output_path,
-                filename
+                base_filename
             )
 
             # Отправить DOCX файл
@@ -233,6 +253,19 @@ class TaskWorker:
         limit = task.data.get('limit', 10000)
 
         try:
+            # Получить пользователя и проверить Claude API ключ
+            db = get_db_manager()
+            user = await db.get_user(user_id)
+
+            if not user:
+                raise ValueError(f"User {user_id} not found")
+
+            if not user.claude_api_key:
+                raise ValueError(
+                    f"Claude API key not configured for user {user_id}. "
+                    f"Please configure it using /settings command."
+                )
+
             # Шаг 1: Экспорт
             await self.bot.send_message(
                 user_id,
@@ -242,22 +275,24 @@ class TaskWorker:
                 f"⏳ Шаг 1/2: Экспорт чата..."
             )
 
-            logger.info(f"Шаг 1/2: Экспорт для задачи #{task.task_id}")
-            result_filename = await export_telegram_csv(
+            logger.info(f"Step 1/2: Export for task #{task.task_id}, user {user_id}")
+            file_path = await export_telegram_csv(
+                user_id=user_id,
                 chat=chat_id,
                 start_date=start_date,
                 end_date=end_date,
                 limit=limit
             )
 
-            file_path = os.path.join(EXPORT_FOLDER, result_filename)
+            # file_path теперь полный путь к файлу
+            filename = os.path.basename(file_path)
 
             # Отправить CSV
             document = FSInputFile(file_path)
             await self.bot.send_document(
                 user_id,
                 document=document,
-                caption=f"✅ Экспорт завершен: <code>{result_filename}</code>"
+                caption=f"✅ Экспорт завершен: <code>{filename}</code>"
             )
 
             # Шаг 2: Анализ
@@ -267,25 +302,28 @@ class TaskWorker:
                 f"⏳ Это может занять некоторое время."
             )
 
-            logger.info(f"Шаг 2/2: Анализ для задачи #{task.task_id}")
+            logger.info(f"Step 2/2: Analysis for task #{task.task_id}, user {user_id}")
 
             loop = asyncio.get_event_loop()
             analysis_text = await loop.run_in_executor(
                 None,
                 analyze_csv_with_claude,
-                file_path
+                file_path,
+                user.claude_api_key  # Per-user Claude API key
             )
 
-            # Создать DOCX
-            output_filename = result_filename.replace('.csv', '_analysis.docx')
-            output_path = os.path.join(OUTPUT_FOLDER, output_filename)
+            # Создать DOCX в per-user папке
+            output_filename = filename.replace('.csv', '_analysis.docx')
+            user_output_folder = os.path.join("data", "users", str(user_id), "analysis")
+            os.makedirs(user_output_folder, exist_ok=True)
+            output_path = os.path.join(user_output_folder, output_filename)
 
             await loop.run_in_executor(
                 None,
                 save_to_docx,
                 analysis_text,
                 output_path,
-                result_filename
+                filename
             )
 
             # Отправить DOCX
@@ -298,13 +336,13 @@ class TaskWorker:
                         f"✅ <b>Анализ завершен!</b>\n\n"
                         f"🆔 Задача: #{task.task_id}\n"
                         f"📱 Чат: <code>{chat_id}</code>\n"
-                        f"📊 CSV: <code>{result_filename}</code>\n"
+                        f"📊 CSV: <code>{filename}</code>\n"
                         f"📄 Анализ: <code>{output_filename}</code>"
                     )
                 )
 
             await task_queue.mark_completed(task.task_id)
-            logger.info(f"✅ Задача #{task.task_id} (экспорт+анализ) завершена успешно")
+            logger.info(f"✅ Task #{task.task_id} (export+analyze) completed successfully")
 
         except Exception as e:
             logger.error(f"❌ Ошибка при экспорт+анализ задачи #{task.task_id}: {e}", exc_info=True)

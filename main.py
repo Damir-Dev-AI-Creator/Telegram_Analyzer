@@ -170,6 +170,23 @@ def run_init_only():
     sys.exit(0 if success else 1)
 
 
+def run_bot():
+    """Запуск Telegram бота"""
+    from core.bootstrap import AppBootstrap
+
+    # Инициализация
+    bootstrap = AppBootstrap(auto_install_deps=False)
+    success, message = bootstrap.initialize()
+
+    if not success:
+        print(message)
+        sys.exit(1)
+
+    # Запуск бота
+    from bot.main import run
+    run()
+
+
 def print_help():
     """Вывод справки"""
     print("""
@@ -177,6 +194,7 @@ def print_help():
 
 Опции:
   (без опций)    Запуск GUI (по умолчанию)
+  --bot, -b      Запуск Telegram бота
   --console, -c  Консольный режим
   --init, -i     Только инициализация (создание папок)
   --paths, -p    Показать пути к папкам
@@ -185,6 +203,7 @@ def print_help():
 
 Примеры:
   python main.py              # Запуск GUI
+  python main.py --bot        # Запуск Telegram бота
   python main.py --console    # Консольный режим
   python main.py --init       # Инициализация
 
@@ -229,6 +248,20 @@ def main():
                 sys.exit(1)
             run_init_only()
         
+        if arg in ['--bot', '-b']:
+            print("🤖 Запуск Telegram бота...")
+            if not check_dependencies_quick():
+                sys.exit(1)
+            try:
+                run_bot()
+            except KeyboardInterrupt:
+                print("\n\n👋 Бот остановлен")
+            except Exception as e:
+                print(f"❌ Ошибка: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+
         if arg in ['--console', '-c']:
             print("📟 Запуск в консольном режиме...")
             if not check_dependencies_quick():
@@ -240,7 +273,8 @@ def main():
             except Exception as e:
                 print(f"❌ Ошибка: {e}")
                 sys.exit(1)
-        else:
+
+        if arg not in ['--bot', '-b', '--console', '-c', '--init', '-i', '--paths', '-p', '--version', '-v', '--help', '-h']:
             print(f"❌ Неизвестный аргумент: {arg}")
             print("Используйте --help для справки")
             sys.exit(1)

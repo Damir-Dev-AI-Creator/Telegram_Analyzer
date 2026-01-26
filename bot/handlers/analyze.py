@@ -511,3 +511,22 @@ async def cmd_exportanalyze_fallback(message: Message):
         f"{get_chat_help_text()}\n\n"
         "Подробности: /help"
     )
+
+
+@router.message(F.document)
+async def handle_document_upload(message: Message):
+    """
+    Автоматический анализ загруженных CSV файлов без команды
+
+    Когда пользователь загружает CSV файл без команды /analyze,
+    автоматически запускается анализ этого файла.
+    """
+    document: Document = message.document
+
+    # Проверить что это CSV файл
+    if not document.file_name.endswith('.csv'):
+        # Игнорировать файлы не CSV формата
+        return
+
+    # Запустить анализ загруженного CSV файла
+    await _analyze_from_document(message)

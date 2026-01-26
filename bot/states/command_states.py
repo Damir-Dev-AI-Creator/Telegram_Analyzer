@@ -7,6 +7,10 @@ from aiogram.fsm.state import State, StatesGroup
 class ExportStates(StatesGroup):
     """Состояния для команды /export"""
     waiting_chat_link = State()  # Ожидание ссылки/ID чата
+    waiting_limit_choice = State()  # Ожидание выбора лимита сообщений
+    waiting_custom_limit = State()  # Ожидание ввода кастомного лимита
+    waiting_date_choice = State()  # Ожидание выбора периода дат
+    waiting_custom_date = State()  # Ожидание ввода кастомной даты
 
 
 class AnalyzeStates(StatesGroup):
@@ -17,6 +21,10 @@ class AnalyzeStates(StatesGroup):
 class ExportAnalyzeStates(StatesGroup):
     """Состояния для команды /exportanalyze"""
     waiting_chat_link = State()  # Ожидание ссылки/ID чата
+    waiting_limit_choice = State()  # Ожидание выбора лимита сообщений
+    waiting_custom_limit = State()  # Ожидание ввода кастомного лимита
+    waiting_date_choice = State()  # Ожидание выбора периода дат
+    waiting_custom_date = State()  # Ожидание ввода кастомной даты
 
 
 class PromptStates(StatesGroup):

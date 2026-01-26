@@ -3,10 +3,11 @@
 
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message, Document
+from aiogram.types import Message, Document, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 import logging
 import os
+from datetime import datetime, timedelta
 
 from core.queue import task_queue, TaskType
 from core.config import EXPORT_FOLDER
@@ -195,18 +196,6 @@ async def process_exportanalyze_chat_link(message: Message, state: FSMContext):
         )
         return
 
-    await _process_export_analyze(message, state, chat_input)
-
-
-async def _process_export_analyze(message: Message, state: FSMContext, chat_input: str):
-    """
-    Общая функция обработки экспорта+анализа
-
-    Args:
-        message: Сообщение от пользователя
-        state: FSM контекст
-        chat_input: Идентификатор чата (ссылка, username или ID)
-    """
     # Парсинг и валидация идентификатора чата
     try:
         chat_id = parse_chat_identifier(chat_input)
@@ -219,10 +208,208 @@ async def _process_export_analyze(message: Message, state: FSMContext, chat_inpu
         )
         return
 
+    # Сохранить информацию о чате в FSM
+    await state.update_data(chat_id=chat_id, chat_input=chat_input)
+
+    # Показать меню выбора лимита сообщений
+    await _show_exportanalyze_limit_menu(message, state)
+
+
+async def _show_exportanalyze_limit_menu(message: Message, state: FSMContext):
+    """Показать меню выбора лимита сообщений для exportanalyze"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📭 Все сообщения", callback_data="ea_limit_all"),
+        ],
+        [
+            InlineKeyboardButton(text="💯 Последние 100", callback_data="ea_limit_100"),
+            InlineKeyboardButton(text="1️⃣K Последние 1,000", callback_data="ea_limit_1000"),
+        ],
+        [
+            InlineKeyboardButton(text="🔟K Последние 10,000", callback_data="ea_limit_10000"),
+            InlineKeyboardButton(text="5️⃣0K Последние 50,000", callback_data="ea_limit_50000"),
+        ],
+        [
+            InlineKeyboardButton(text="✏️ Кастомный лимит", callback_data="ea_limit_custom"),
+        ]
+    ])
+
+    await state.set_state(ExportAnalyzeStates.waiting_limit_choice)
+    await message.answer(
+        "📊 <b>Настройка экспорта+анализа - Шаг 1/2</b>\n\n"
+        "Сколько сообщений экспортировать?",
+        reply_markup=keyboard
+    )
+
+
+@router.callback_query(F.data.startswith("ea_limit_"), ExportAnalyzeStates.waiting_limit_choice)
+async def process_exportanalyze_limit_choice(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора лимита сообщений для exportanalyze"""
+    await callback.answer()
+
+    choice = callback.data.replace("ea_limit_", "")
+
+    if choice == "custom":
+        await state.set_state(ExportAnalyzeStates.waiting_custom_limit)
+        await callback.message.edit_text(
+            "📊 <b>Кастомный лимит</b>\n\n"
+            "Введите количество сообщений для экспорта (число от 1 до 1,000,000):\n\n"
+            "Или используйте /cancel для отмены."
+        )
+        return
+
+    # Определить лимит
+    limit_map = {
+        "all": None,  # Все сообщения
+        "100": 100,
+        "1000": 1000,
+        "10000": 10000,
+        "50000": 50000
+    }
+
+    limit = limit_map.get(choice)
+    await state.update_data(limit=limit)
+
+    # Показать меню выбора периода
+    await _show_exportanalyze_date_menu(callback.message, state)
+
+
+@router.message(ExportAnalyzeStates.waiting_custom_limit)
+async def process_exportanalyze_custom_limit(message: Message, state: FSMContext):
+    """Обработка ввода кастомного лимита для exportanalyze"""
+    if message.text and message.text.startswith('/cancel'):
+        await state.clear()
+        await message.answer("❌ Экспорт+анализ отменен.")
+        return
+
+    try:
+        limit = int(message.text.strip())
+        if limit < 1 or limit > 1000000:
+            await message.answer(
+                "❌ Неверное значение. Введите число от 1 до 1,000,000.\n"
+                "Или используйте /cancel для отмены."
+            )
+            return
+
+        await state.update_data(limit=limit)
+        await _show_exportanalyze_date_menu(message, state)
+
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат. Введите целое число.\n"
+            "Или используйте /cancel для отмены."
+        )
+
+
+async def _show_exportanalyze_date_menu(message: Message, state: FSMContext):
+    """Показать меню выбора периода дат для exportanalyze"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📅 За все время", callback_data="ea_date_all"),
+        ],
+        [
+            InlineKeyboardButton(text="7️⃣ Последние 7 дней", callback_data="ea_date_7days"),
+            InlineKeyboardButton(text="3️⃣0 Последние 30 дней", callback_data="ea_date_30days"),
+        ],
+        [
+            InlineKeyboardButton(text="3️⃣ Последние 3 месяца", callback_data="ea_date_3months"),
+            InlineKeyboardButton(text="🗓 Последний год", callback_data="ea_date_1year"),
+        ],
+        [
+            InlineKeyboardButton(text="✏️ Кастомная дата", callback_data="ea_date_custom"),
+        ]
+    ])
+
+    await state.set_state(ExportAnalyzeStates.waiting_date_choice)
+    await message.answer(
+        "📅 <b>Настройка экспорта+анализа - Шаг 2/2</b>\n\n"
+        "За какой период экспортировать сообщения?",
+        reply_markup=keyboard
+    )
+
+
+@router.callback_query(F.data.startswith("ea_date_"), ExportAnalyzeStates.waiting_date_choice)
+async def process_exportanalyze_date_choice(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора периода дат для exportanalyze"""
+    await callback.answer()
+
+    choice = callback.data.replace("ea_date_", "")
+
+    if choice == "custom":
+        await state.set_state(ExportAnalyzeStates.waiting_custom_date)
+        await callback.message.edit_text(
+            "📅 <b>Кастомная дата</b>\n\n"
+            "Введите дату начала в формате <code>ДД.ММ.ГГГГ</code>\n"
+            "Например: <code>01.01.2024</code>\n\n"
+            "Будут экспортированы сообщения начиная с этой даты и до настоящего момента.\n\n"
+            "Или используйте /cancel для отмены."
+        )
+        return
+
+    # Определить даты
+    now = datetime.now()
+    start_date = None
+
+    date_map = {
+        "all": None,  # За все время
+        "7days": now - timedelta(days=7),
+        "30days": now - timedelta(days=30),
+        "3months": now - timedelta(days=90),
+        "1year": now - timedelta(days=365)
+    }
+
+    start_date = date_map.get(choice)
+    await state.update_data(start_date=start_date, end_date=None)
+
+    # Начать экспорт+анализ с выбранными параметрами
+    await _start_exportanalyze_with_params(callback.message, state)
+
+
+@router.message(ExportAnalyzeStates.waiting_custom_date)
+async def process_exportanalyze_custom_date(message: Message, state: FSMContext):
+    """Обработка ввода кастомной даты для exportanalyze"""
+    if message.text and message.text.startswith('/cancel'):
+        await state.clear()
+        await message.answer("❌ Экспорт+анализ отменен.")
+        return
+
+    try:
+        # Парсинг даты в формате ДД.ММ.ГГГГ
+        date_str = message.text.strip()
+        start_date = datetime.strptime(date_str, "%d.%m.%Y")
+
+        # Проверка что дата не в будущем
+        if start_date > datetime.now():
+            await message.answer(
+                "❌ Дата не может быть в будущем.\n"
+                "Попробуйте еще раз или используйте /cancel для отмены."
+            )
+            return
+
+        await state.update_data(start_date=start_date, end_date=None)
+        await _start_exportanalyze_with_params(message, state)
+
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат даты. Используйте формат <code>ДД.ММ.ГГГГ</code>\n"
+            "Например: <code>01.01.2024</code>\n\n"
+            "Или используйте /cancel для отмены."
+        )
+
+
+async def _start_exportanalyze_with_params(message: Message, state: FSMContext):
+    """Начать экспорт+анализ с выбранными параметрами"""
+    data = await state.get_data()
+    chat_id = data.get('chat_id')
+    chat_input = data.get('chat_input')
+    limit = data.get('limit')
+    start_date = data.get('start_date')
+    end_date = data.get('end_date')
+
     # Очистить состояние
     await state.clear()
 
-    logger.info(f"User {message.from_user.id} requested export+analyze for chat: {chat_id}")
+    logger.info(f"User {message.from_user.id} starting export+analyze: chat={chat_id}, limit={limit}, start_date={start_date}")
 
     try:
         # Добавить комбинированную задачу в очередь
@@ -231,19 +418,31 @@ async def _process_export_analyze(message: Message, state: FSMContext, chat_inpu
             user_id=message.from_user.id,
             data={
                 'chat_id': chat_id,
-                'start_date': None,
-                'end_date': None,
-                'limit': 10000
+                'start_date': start_date.isoformat() if start_date else None,
+                'end_date': end_date.isoformat() if end_date else None,
+                'limit': limit
             }
         )
 
-        # Сразу ответить пользователю
+        # Форматирование для отображения
         display_chat = format_chat_identifier_for_display(chat_input)
+
+        if limit is None:
+            limit_text = "Все сообщения"
+        else:
+            limit_text = f"{limit:,} сообщений"
+
+        if start_date is None:
+            period_text = "За все время"
+        else:
+            period_text = f"С {start_date.strftime('%d.%m.%Y')}"
 
         await message.answer(
             f"✅ <b>Задача создана!</b>\n\n"
             f"🆔 Задача: #{task_id}\n"
-            f"📱 Чат: <code>{display_chat}</code>\n\n"
+            f"📱 Чат: <code>{display_chat}</code>\n"
+            f"📅 Период: {period_text}\n"
+            f"📊 Лимит: {limit_text}\n\n"
             f"<b>📋 План выполнения:</b>\n"
             f"1️⃣ Экспорт чата в CSV (~30 сек)\n"
             f"2️⃣ Анализ через Claude API (~1-3 мин)\n\n"
@@ -261,6 +460,34 @@ async def _process_export_analyze(message: Message, state: FSMContext, chat_inpu
             f"Ошибка: {str(e)}\n\n"
             f"Попробуйте еще раз или обратитесь к администратору."
         )
+
+
+async def _process_export_analyze(message: Message, state: FSMContext, chat_input: str):
+    """
+    Общая функция обработки экспорта+анализа (когда чат передан сразу в команде)
+
+    Args:
+        message: Сообщение от пользователя
+        state: FSM контекст
+        chat_input: Идентификатор чата (ссылка, username или ID)
+    """
+    # Парсинг и валидация идентификатора чата
+    try:
+        chat_id = parse_chat_identifier(chat_input)
+    except ValueError as e:
+        await message.answer(
+            f"❌ <b>Неверный формат идентификатора чата</b>\n\n"
+            f"Ошибка: {str(e)}\n\n"
+            f"{get_chat_help_text()}\n\n"
+            "Попробуйте еще раз."
+        )
+        return
+
+    # Сохранить информацию о чате в FSM
+    await state.update_data(chat_id=chat_id, chat_input=chat_input)
+
+    # Показать меню выбора лимита сообщений
+    await _show_exportanalyze_limit_menu(message, state)
 
 
 @router.message(F.text.startswith("/analyze"))

@@ -83,22 +83,32 @@ async def export_telegram_csv(
 
     logger.info(f"Starting export for user {user_id}, chat: {chat}")
 
-    # Парсинг дат
+    # Парсинг дат (поддержка двух форматов: ISO и ДД-ММ-ГГГГ)
     parsed_start_date = None
     if start_date:
         try:
-            parsed_start_date = datetime.strptime(start_date, '%d-%m-%Y').replace(tzinfo=timezone.utc)
-        except ValueError as e:
-            raise ValueError(f"Неверный формат даты начала. Используйте ДД-ММ-ГГГГ: {e}")
+            # Попробовать ISO формат (YYYY-MM-DDTHH:MM:SS)
+            parsed_start_date = datetime.fromisoformat(start_date).replace(tzinfo=timezone.utc)
+        except (ValueError, AttributeError):
+            try:
+                # Попробовать формат ДД-ММ-ГГГГ
+                parsed_start_date = datetime.strptime(start_date, '%d-%m-%Y').replace(tzinfo=timezone.utc)
+            except ValueError as e:
+                raise ValueError(f"Неверный формат даты начала. Используйте ДД-ММ-ГГГГ или ISO формат: {e}")
 
     parsed_end_date = None
     if end_date:
         try:
-            parsed_end_date = datetime.strptime(end_date, '%d-%m-%Y').replace(
-                hour=23, minute=59, second=59, tzinfo=timezone.utc
-            )
-        except ValueError as e:
-            raise ValueError(f"Неверный формат даты конца. Используйте ДД-ММ-ГГГГ: {e}")
+            # Попробовать ISO формат
+            parsed_end_date = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc)
+        except (ValueError, AttributeError):
+            try:
+                # Попробовать формат ДД-ММ-ГГГГ
+                parsed_end_date = datetime.strptime(end_date, '%d-%m-%Y').replace(
+                    hour=23, minute=59, second=59, tzinfo=timezone.utc
+                )
+            except ValueError as e:
+                raise ValueError(f"Неверный формат даты конца. Используйте ДД-ММ-ГГГГ или ISO формат: {e}")
 
     # Создать клиент из сохраненной сессии
     client = TelegramClient(

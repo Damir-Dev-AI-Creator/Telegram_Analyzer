@@ -14,7 +14,7 @@ from core.config import BOT_TOKEN, reload_config
 from core.first_run_setup import check_bot_token_configured, run_first_time_setup
 
 # Импорт обработчиков
-from bot.handlers import start, export, analyze, setup, prompt
+from bot.handlers import start, export, analyze, setup, prompt, debug
 
 # Импорт инициализации БД
 from core.database import init_database
@@ -100,6 +100,7 @@ async def main():
     dp.include_router(export.router)
     dp.include_router(analyze.router)
     dp.include_router(prompt.router)
+    dp.include_router(debug.router)
 
     logger.info("✅ Обработчики зарегистрированы")
 
@@ -114,6 +115,7 @@ async def main():
     logger.info("Доступные команды:")
     logger.info("  /start  - Приветствие и главное меню")
     logger.info("  /setup  - Настройка Telegram API и Claude API")
+    logger.info("  /status - Диагностика настроек и проблем")
     logger.info("  /help   - Подробная справка")
     logger.info("  /export <chat_id> - Экспорт чата")
     logger.info("  /analyze <file> - Анализ через Claude API")

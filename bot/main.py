@@ -12,7 +12,7 @@ from aiogram.enums import ParseMode
 from core.config import BOT_TOKEN, OWNER_ID
 
 # Импорт обработчиков
-from bot.handlers import start, export
+from bot.handlers import start, export, analyze
 
 # Импорт middleware
 from bot.middlewares.auth import AuthMiddleware
@@ -69,6 +69,7 @@ async def main():
     # Регистрация роутеров
     dp.include_router(start.router)
     dp.include_router(export.router)
+    dp.include_router(analyze.router)
 
     logger.info("✅ Обработчики зарегистрированы")
 
@@ -82,6 +83,8 @@ async def main():
     logger.info("  /start - Приветствие и главное меню")
     logger.info("  /help  - Подробная справка")
     logger.info("  /export <chat_id> - Экспорт чата")
+    logger.info("  /analyze <file> - Анализ через Claude API")
+    logger.info("  /exportanalyze <chat_id> - Экспорт + анализ")
     logger.info("=" * 60)
     logger.info("Нажмите Ctrl+C для остановки")
     logger.info("=" * 60)

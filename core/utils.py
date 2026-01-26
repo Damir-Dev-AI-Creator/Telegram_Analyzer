@@ -691,15 +691,16 @@ def setup_logging(log_dir: Path, name: str = "ysell_analyzer") -> logging.Logger
 
 def check_dependencies() -> tuple[bool, List[str]]:
     """
-    Проверка установленных зависимостей.
+    Проверка установленных зависимостей (только обязательные, без GUI).
 
     Returns:
         (все_установлены, список_отсутствующих)
     """
+    # Только обязательные зависимости (без GUI для серверного режима)
     required = {
         'telethon': 'telethon>=1.34.0',
         'pandas': 'pandas>=2.0.0',
-        'customtkinter': 'customtkinter>=5.2.0',
+        # customtkinter не включен - это GUI библиотека, не обязательна для bot режима
         'anthropic': 'anthropic>=0.40.0',
         'docx': 'python-docx>=1.1.0',
         'PIL': 'Pillow>=10.0.0',

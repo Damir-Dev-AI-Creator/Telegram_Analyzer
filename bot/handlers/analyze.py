@@ -2,14 +2,16 @@
 """Обработчики команд для анализа через Claude API"""
 
 from aiogram import Router, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, Document
+from aiogram.fsm.context import FSMContext
 import logging
 import os
 
 from core.queue import task_queue, TaskType
 from core.config import EXPORT_FOLDER
 from core.chat_utils import parse_chat_identifier, get_chat_help_text, format_chat_identifier_for_display
+from bot.states.command_states import ExportAnalyzeStates
 
 logger = logging.getLogger(__name__)
 
@@ -138,16 +140,13 @@ async def _create_analyze_task(message: Message, file_path: str, filename: str):
 
 
 @router.message(Command("exportanalyze"))
-async def cmd_export_analyze(message: Message):
+async def cmd_export_analyze(message: Message, state: FSMContext):
     """
     Обработчик команды /exportanalyze
 
-    Выполняет экспорт чата и сразу анализирует его через Claude API
-
-    Формат:
-        /exportanalyze CHAT_ID
-        /exportanalyze @username
-        /exportanalyze https://t.me/username
+    Поддерживает два режима:
+    1. С аргументом: /exportanalyze https://t.me/chat - выполняется сразу
+    2. Без аргумента: /exportanalyze - бот просит отправить ссылку следующим сообщением
 
     Примеры:
         /exportanalyze -1001234567890
@@ -157,22 +156,57 @@ async def cmd_export_analyze(message: Message):
     # Получить аргументы команды
     args = message.text.split(maxsplit=1)
 
-    if len(args) < 2:
+    # Режим 1: Команда с аргументом - выполнить сразу
+    if len(args) >= 2:
+        chat_input = args[1].strip()
+        await _process_export_analyze(message, state, chat_input)
+        return
+
+    # Режим 2: Команда без аргумента - перейти в режим ожидания
+    await state.set_state(ExportAnalyzeStates.waiting_chat_link)
+    await message.answer(
+        "⚡ <b>Экспорт + Анализ</b>\n\n"
+        "Отправьте мне ссылку на чат, username или ID следующим сообщением:\n\n"
+        f"{get_chat_help_text()}\n\n"
+        "<b>Что произойдет:</b>\n"
+        "1. Экспортирую чат в CSV (~30 сек)\n"
+        "2. Анализирую через Claude API (~1-3 мин)\n"
+        "3. Отправлю оба файла\n\n"
+        "Или используйте /cancel для отмены."
+    )
+
+
+@router.message(ExportAnalyzeStates.waiting_chat_link)
+async def process_exportanalyze_chat_link(message: Message, state: FSMContext):
+    """Обработка ссылки/ID чата после команды /exportanalyze"""
+
+    # Проверка на команду отмены
+    if message.text and message.text.startswith('/cancel'):
+        await state.clear()
+        await message.answer("❌ Экспорт+анализ отменен.")
+        return
+
+    chat_input = message.text.strip() if message.text else ""
+
+    if not chat_input:
         await message.answer(
-            "❌ <b>Неверный формат команды</b>\n\n"
-            "<b>Использование:</b>\n"
-            "<code>/exportanalyze CHAT</code>\n\n"
-            f"{get_chat_help_text()}\n\n"
-            "<b>Что делает команда:</b>\n"
-            "1. Экспортирует чат в CSV\n"
-            "2. Анализирует через Claude API\n"
-            "3. Отправляет вам оба файла (CSV + DOCX)\n\n"
-            "Используйте /help для подробных инструкций."
+            "❌ Пожалуйста, отправьте ссылку на чат, username или ID.\n"
+            "Или используйте /cancel для отмены."
         )
         return
 
-    chat_input = args[1].strip()
+    await _process_export_analyze(message, state, chat_input)
 
+
+async def _process_export_analyze(message: Message, state: FSMContext, chat_input: str):
+    """
+    Общая функция обработки экспорта+анализа
+
+    Args:
+        message: Сообщение от пользователя
+        state: FSM контекст
+        chat_input: Идентификатор чата (ссылка, username или ID)
+    """
     # Парсинг и валидация идентификатора чата
     try:
         chat_id = parse_chat_identifier(chat_input)
@@ -180,9 +214,13 @@ async def cmd_export_analyze(message: Message):
         await message.answer(
             f"❌ <b>Неверный формат идентификатора чата</b>\n\n"
             f"Ошибка: {str(e)}\n\n"
-            f"{get_chat_help_text()}"
+            f"{get_chat_help_text()}\n\n"
+            "Попробуйте еще раз или используйте /cancel для отмены."
         )
         return
+
+    # Очистить состояние
+    await state.clear()
 
     logger.info(f"User {message.from_user.id} requested export+analyze for chat: {chat_id}")
 

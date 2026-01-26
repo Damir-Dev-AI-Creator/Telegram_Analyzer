@@ -14,7 +14,7 @@ from core.config import BOT_TOKEN, reload_config
 from core.first_run_setup import check_bot_token_configured, run_first_time_setup
 
 # Импорт обработчиков
-from bot.handlers import start, export, analyze, setup
+from bot.handlers import start, export, analyze, setup, prompt
 
 # Импорт инициализации БД
 from core.database import init_database
@@ -99,6 +99,7 @@ async def main():
     dp.include_router(start.router)
     dp.include_router(export.router)
     dp.include_router(analyze.router)
+    dp.include_router(prompt.router)
 
     logger.info("✅ Обработчики зарегистрированы")
 

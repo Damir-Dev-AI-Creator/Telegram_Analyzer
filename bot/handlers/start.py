@@ -4,6 +4,7 @@
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
 import logging
 
 from core.db_manager import get_db_manager
@@ -212,7 +213,19 @@ async def cmd_help(message: Message):
 /export - Экспорт чата
 /analyze - Анализ через Claude
 /exportanalyze - Экспорт + анализ
+/setprompt - Настроить промпт для Claude
+/cancel - Отменить текущее действие
 /help - Эта справка
+
+<b>💡 Двухшаговый режим:</b>
+Команды /export и /exportanalyze можно использовать без аргументов:
+1. Отправьте команду (например, /export)
+2. Бот попросит ссылку
+3. Отправьте ссылку следующим сообщением
+4. Используйте /cancel для отмены
+
+<b>🎯 Кастомный промпт:</b>
+С помощью /setprompt вы можете настроить свою инструкцию для Claude AI, определяющую как анализировать чаты. Это позволяет получать анализ именно в том формате, который вам нужен!
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -226,3 +239,27 @@ async def cmd_help(message: Message):
 """
 
     await message.answer(help_text)
+
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    """
+    Обработчик команды /cancel
+    Отменяет текущее действие и сбрасывает состояние
+    """
+    current_state = await state.get_state()
+    
+    if current_state is None:
+        await message.answer(
+            "Нечего отменять.\n"
+            "Используйте /help для списка команд."
+        )
+        return
+    
+    await state.clear()
+    logger.info(f"User {message.from_user.id} cancelled state: {current_state}")
+    
+    await message.answer(
+        "✅ Действие отменено.\n\n"
+        "Используйте /help для списка доступных команд."
+    )

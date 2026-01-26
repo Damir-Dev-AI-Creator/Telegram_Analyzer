@@ -77,6 +77,9 @@ class UserSettings(Base):
     # Лимиты
     default_export_limit = Column(Integer, default=10000)
 
+    # Кастомный промпт для анализа через Claude
+    custom_prompt = Column(Text, nullable=True)
+
     # Связь с пользователем
     user = relationship("User", back_populates="settings")
 

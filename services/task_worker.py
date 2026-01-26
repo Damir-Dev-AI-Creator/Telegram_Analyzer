@@ -177,8 +177,12 @@ class TaskWorker:
                 f"⏳ Отправляю данные в Claude API..."
             )
 
-            # Выполнить анализ через Claude API с per-user ключом
+            # Выполнить анализ через Claude API с per-user ключом и кастомным промптом
             logger.info(f"Starting analysis for task #{task.task_id}, user {user_id}")
+
+            # Получить кастомный промпт из настроек пользователя
+            settings = await db.get_user_settings(user_id)
+            custom_prompt = settings.custom_prompt if settings else None
 
             # Запустить анализ в отдельном потоке (т.к. analyze_csv_with_claude синхронный)
             loop = asyncio.get_event_loop()
@@ -186,7 +190,8 @@ class TaskWorker:
                 None,
                 analyze_csv_with_claude,
                 file_path,
-                user.claude_api_key  # Per-user Claude API key
+                user.claude_api_key,  # Per-user Claude API key
+                custom_prompt  # Custom prompt or None
             )
 
             # Создать DOCX файл в per-user папке
@@ -304,12 +309,17 @@ class TaskWorker:
 
             logger.info(f"Step 2/2: Analysis for task #{task.task_id}, user {user_id}")
 
+            # Получить кастомный промпт из настроек пользователя
+            settings = await db.get_user_settings(user_id)
+            custom_prompt = settings.custom_prompt if settings else None
+
             loop = asyncio.get_event_loop()
             analysis_text = await loop.run_in_executor(
                 None,
                 analyze_csv_with_claude,
                 file_path,
-                user.claude_api_key  # Per-user Claude API key
+                user.claude_api_key,  # Per-user Claude API key
+                custom_prompt  # Custom prompt or None
             )
 
             # Создать DOCX в per-user папке

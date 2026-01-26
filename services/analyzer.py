@@ -59,13 +59,14 @@ def get_client(api_key: Optional[str] = None) -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
 
-def analyze_csv_with_claude(file_path: str, claude_api_key: Optional[str] = None) -> str:
+def analyze_csv_with_claude(file_path: str, claude_api_key: Optional[str] = None, custom_prompt: Optional[str] = None) -> str:
     """
     Читает CSV и отправляет данные в Claude API для анализа.
 
     Args:
         file_path: Путь к CSV файлу
         claude_api_key: Claude API ключ (опционально, если None - использует глобальный)
+        custom_prompt: Кастомный промпт пользователя (опционально, если None - использует дефолтный)
 
     Returns:
         Текст анализа от Claude
@@ -100,8 +101,14 @@ def analyze_csv_with_claude(file_path: str, claude_api_key: Optional[str] = None
         # Формирование контента
         csv_content = df.to_string(index=False)
 
-        # Промпт для анализа
-        prompt = _build_analysis_prompt(csv_content)
+        # Промпт для анализа (используем кастомный если есть, иначе дефолтный)
+        if custom_prompt:
+            logger.info("🎯 Используется кастомный промпт пользователя")
+            # В кастомном промпте {csv_content} будет заменен на данные
+            prompt = custom_prompt.replace("{csv_content}", csv_content)
+        else:
+            logger.info("📝 Используется дефолтный промпт анализа")
+            prompt = _build_analysis_prompt(csv_content)
 
         logger.info("🤖 Отправка запроса в Claude API...")
 

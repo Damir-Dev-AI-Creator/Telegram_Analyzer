@@ -2,12 +2,14 @@
 """Обработчик команды /export для экспорта чатов (асинхронный)"""
 
 from aiogram import Router, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
 import logging
 
 from core.queue import task_queue, TaskType
-from core.chat_utils import parse_chat_identifier, get_chat_help_text
+from core.chat_utils import parse_chat_identifier, get_chat_help_text, format_chat_identifier_for_display
+from bot.states.command_states import ExportStates
 
 logger = logging.getLogger(__name__)
 
@@ -16,14 +18,13 @@ router = Router()
 
 
 @router.message(Command("export"))
-async def cmd_export(message: Message):
+async def cmd_export(message: Message, state: FSMContext):
     """
     Обработчик команды /export (асинхронный через очередь)
 
-    Формат:
-        /export CHAT_ID
-        /export @username
-        /export https://t.me/username
+    Поддерживает два режима:
+    1. С аргументом: /export https://t.me/chat - выполняется сразу
+    2. Без аргумента: /export - бот просит отправить ссылку следующим сообщением
 
     Примеры:
         /export -1001234567890
@@ -33,18 +34,53 @@ async def cmd_export(message: Message):
     # Получить аргументы команды
     args = message.text.split(maxsplit=1)
 
-    if len(args) < 2:
+    # Режим 1: Команда с аргументом - выполнить сразу
+    if len(args) >= 2:
+        chat_input = args[1].strip()
+        await _process_export(message, state, chat_input)
+        return
+
+    # Режим 2: Команда без аргумента - перейти в режим ожидания
+    await state.set_state(ExportStates.waiting_chat_link)
+    await message.answer(
+        "📊 <b>Экспорт чата</b>\n\n"
+        "Отправьте мне ссылку на чат, username или ID следующим сообщением:\n\n"
+        f"{get_chat_help_text()}\n\n"
+        "Или используйте /cancel для отмены."
+    )
+
+
+@router.message(ExportStates.waiting_chat_link)
+async def process_export_chat_link(message: Message, state: FSMContext):
+    """Обработка ссылки/ID чата после команды /export"""
+
+    # Проверка на команду отмены
+    if message.text and message.text.startswith('/cancel'):
+        await state.clear()
+        await message.answer("❌ Экспорт отменен.")
+        return
+
+    chat_input = message.text.strip() if message.text else ""
+
+    if not chat_input:
         await message.answer(
-            "❌ <b>Неверный формат команды</b>\n\n"
-            "<b>Использование:</b>\n"
-            "<code>/export CHAT</code>\n\n"
-            f"{get_chat_help_text()}\n\n"
-            "Используйте /help для подробных инструкций."
+            "❌ Пожалуйста, отправьте ссылку на чат, username или ID.\n"
+            "Или используйте /cancel для отмены."
         )
         return
 
-    chat_input = args[1].strip()
+    await _process_export(message, state, chat_input)
 
+
+async def _process_export(message: Message, state: FSMContext, chat_input: str):
+    """
+    Общая функция обработки экспорта
+
+    Args:
+        message: Сообщение от пользователя
+        state: FSM контекст
+        chat_input: Идентификатор чата (ссылка, username или ID)
+    """
     # Парсинг и валидация идентификатора чата
     try:
         chat_id = parse_chat_identifier(chat_input)
@@ -52,9 +88,13 @@ async def cmd_export(message: Message):
         await message.answer(
             f"❌ <b>Неверный формат идентификатора чата</b>\n\n"
             f"Ошибка: {str(e)}\n\n"
-            f"{get_chat_help_text()}"
+            f"{get_chat_help_text()}\n\n"
+            "Попробуйте еще раз или используйте /cancel для отмены."
         )
         return
+
+    # Очистить состояние
+    await state.clear()
 
     logger.info(f"User {message.from_user.id} requested export for chat: {chat_id}")
 
@@ -72,7 +112,6 @@ async def cmd_export(message: Message):
         )
 
         # Сразу ответить пользователю
-        from core.chat_utils import format_chat_identifier_for_display
         display_chat = format_chat_identifier_for_display(chat_input)
 
         await message.answer(

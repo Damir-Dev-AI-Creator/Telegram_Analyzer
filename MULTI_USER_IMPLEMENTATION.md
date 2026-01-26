@@ -13,6 +13,21 @@ The bot now supports multiple independent users, each with:
 - Isolated data folders
 - Personal settings and filters
 
+## 🔐 Important Update: QR-Code Authorization
+
+**Security Improvement:** The bot now uses QR-code authorization instead of phone number + verification code.
+
+**Why:** Telegram blocks verification codes sent in chats to prevent phishing. QR authorization bypasses this protection and provides a better UX.
+
+**How it works:**
+1. User provides API_ID and API_HASH
+2. Bot generates and shows QR code
+3. User scans QR in Telegram app (Settings → Devices → Link Desktop Device)
+4. Authorization completes instantly
+5. Phone number retrieved automatically from account
+
+**See:** `QR_AUTH_UPDATE.md` for full details
+
 ## 🏗️ Architecture Components
 
 ### 1. Database Layer
@@ -53,19 +68,22 @@ UserSettings:
 1. `/setup` command starts onboarding
 2. Collect API_ID (with validation)
 3. Collect API_HASH (with validation)
-4. Collect PHONE (international format)
-5. Send Telegram authorization code
-6. Verify code (or 2FA password if needed)
-7. Optionally collect Claude API key
-8. Save encrypted session to database
-9. Mark user as configured
+4. **Generate and show QR code**
+5. **User scans QR in Telegram app**
+6. **Authorization completes instantly (no code entry!)**
+7. Phone number retrieved automatically
+8. Optionally collect Claude API key
+9. Save encrypted session to database
+10. Mark user as configured
 
 **Features:**
+- QR-code authorization (bypasses Telegram code protection)
 - Input validation at each step
-- 2FA support
+- No manual code entry required
+- No 2FA complications (handled by app)
 - Can skip Claude API (add later)
 - Can reconfigure anytime
-- Automatic password message deletion for security
+- 5-minute QR timeout with retry
 
 ### 3. Updated Core Systems
 
@@ -159,9 +177,13 @@ data/
 ## 🛠️ Dependencies Added
 
 ```
+# Multi-User Support
 sqlalchemy[asyncio]>=2.0.36  # Async ORM
 aiosqlite>=0.20.0            # Async SQLite
 cryptography>=43.0.3         # Session encryption
+
+# QR Authorization
+qrcode>=8.0                  # QR code generation
 ```
 
 ## 📝 Commits Made
@@ -174,6 +196,9 @@ cryptography>=43.0.3         # Session encryption
 6. `feat: add per-user Claude API key support to analyzer`
 7. `feat: update task worker to support per-user processing and folders`
 8. `feat: update start handler to check user configuration and guide to setup`
+9. `docs: add comprehensive multi-user implementation documentation`
+10. **`feat: implement QR-code authorization to bypass Telegram code protection`** ⭐
+11. `docs: add QR-code authorization implementation documentation`
 
 ## ✨ Key Improvements
 

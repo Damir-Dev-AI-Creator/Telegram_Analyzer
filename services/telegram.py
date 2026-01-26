@@ -1,15 +1,18 @@
 # telegram.py
-"""Модуль для экспорта сообщений из Telegram"""
+"""Модуль для экспорта сообщений из Telegram (multi-user version)"""
 
 import csv
 import asyncio
 import re
 import logging
-from core.config import API_ID, API_HASH, PHONE, EXCLUDE_USER_ID, EXCLUDE_USERNAME, EXPORT_FOLDER, SESSION_PATH
 from datetime import datetime, timezone
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 import os
+from typing import Optional
+
+from core.db_manager import get_db_manager
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -31,28 +34,54 @@ def clean_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "", name).replace(" ", "_")
 
 
-async def export_telegram_csv(chat: str, start_date: str = None, end_date: str = None, limit: int = 10000,
-                              code_handler=None):
+async def export_telegram_csv(
+    user_id: int,
+    chat: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 10000
+) -> str:
     """
-    Экспорт сообщений из Telegram чата в CSV файл
+    Экспорт сообщений из Telegram чата в CSV файл (per-user version)
 
     Args:
+        user_id: Telegram User ID владельца
         chat: ID или username чата
-        start_date: Дата начала в формате ДД-ММ-ГГГГ
-        end_date: Дата конца в формате ДД-ММ-ГГГГ
-        limit: Максимальное количество сообщений
-        code_handler: Обработчик для получения кода авторизации (опционально)
+        start_date: Дата начала в формате ДД-ММ-ГГГГ (опционально)
+        end_date: Дата конца в формате ДД-ММ-ГГГГ (опционально)
+        limit: Максимальное количество сообщений (по умолчанию 10000)
+
+    Returns:
+        str: Путь к созданному CSV файлу
+
+    Raises:
+        ValueError: Если пользователь не настроен или не авторизован
+        Exception: Другие ошибки при экспорте
     """
+    db = get_db_manager()
 
-    # Проверка наличия необходимых параметров
-    if not API_ID or API_ID == 0:
-        raise ValueError("API_ID не настроен. Откройте настройки и введите API_ID.")
+    # Получить данные пользователя из БД
+    user = await db.get_user(user_id)
 
-    if not API_HASH or API_HASH.strip() == "":
-        raise ValueError("API_HASH не настроен. Откройте настройки и введите API_HASH.")
+    if not user:
+        raise ValueError(f"Пользователь {user_id} не найден в базе данных. Запустите /setup для настройки.")
 
-    if not PHONE or PHONE.strip() == "":
-        raise ValueError("PHONE не настроен. Откройте настройки и введите номер телефона.")
+    if not user.is_configured:
+        raise ValueError(f"Пользователь {user_id} не настроен. Запустите /setup для настройки.")
+
+    if not user.is_authorized:
+        raise ValueError(f"Пользователь {user_id} не авторизован в Telegram. Запустите /setup для авторизации.")
+
+    # Получить настройки пользователя
+    settings = await db.get_user_settings(user_id)
+
+    # Получить расшифрованную сессию
+    session_string = await db.get_user_session(user_id)
+
+    if not session_string:
+        raise ValueError(f"Сессия пользователя {user_id} не найдена. Запустите /setup для авторизации.")
+
+    logger.info(f"Starting export for user {user_id}, chat: {chat}")
 
     # Парсинг дат
     parsed_start_date = None
@@ -71,62 +100,25 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
         except ValueError as e:
             raise ValueError(f"Неверный формат даты конца. Используйте ДД-ММ-ГГГГ: {e}")
 
-    client = TelegramClient(str(SESSION_PATH), API_ID, API_HASH)
-
-    # Функции для авторизации
-    async def code_callback():
-        """Callback для получения кода"""
-        if code_handler:
-            try:
-                code = await code_handler.get_code(PHONE)
-                return code
-            except Exception as e:
-                logger.error(f"Ошибка получения кода: {e}")
-                raise
-        else:
-            return input('Введите код подтверждения: ')
-
-    async def password_callback():
-        """Callback для получения пароля 2FA"""
-        if code_handler:
-            try:
-                password = await code_handler.get_password()
-                return password
-            except Exception as e:
-                logger.error(f"Ошибка получения пароля: {e}")
-                raise
-        else:
-            return input('Введите пароль двухфакторной аутентификации: ')
+    # Создать клиент из сохраненной сессии
+    client = TelegramClient(
+        StringSession(session_string),
+        user.api_id,
+        user.api_hash,
+        device_model=f"Telegram Analyzer Bot (User {user_id})",
+        system_version="Linux",
+        app_version="1.0"
+    )
 
     try:
-        # ИСПРАВЛЕНО: правильное использование параметра password
-        await client.start(
-            phone=PHONE,
-            code_callback=code_callback,
-            password=password_callback  # ✅ ИСПРАВЛЕНО: было password_callback без скобок
-        )
+        await client.connect()
 
-        logger.info("✅ Успешная авторизация в Telegram")
+        # Проверить авторизацию
+        if not await client.is_user_authorized():
+            raise ValueError(f"Сессия пользователя {user_id} истекла. Запустите /setup для повторной авторизации.")
 
-        # Закрываем диалог авторизации после успешного входа
-        if code_handler:
-            code_handler.close()
+        logger.info(f"✅ User {user_id} authorized in Telegram")
 
-    except SessionPasswordNeededError:
-        logger.warning("Требуется пароль двухфакторной аутентификации")
-        password = await password_callback()
-        await client.sign_in(password=password)
-        if code_handler:
-            code_handler.close()
-
-    except Exception as e:
-        error_msg = f"Ошибка подключения к Telegram: {e}"
-        logger.error(error_msg)
-        if code_handler:
-            code_handler.show_error(error_msg)
-        raise Exception(error_msg)
-
-    try:
         entity = await client.get_entity(chat)
 
         # Определяем имя чата для названия файла
@@ -139,13 +131,17 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
         e_str = parsed_end_date.strftime('%d-%m-%Y') if parsed_end_date else "now"
         output_file = f"{clean_filename(chat_title)}_{s_str}_{e_str}.csv"
 
-        logger.info(f"--- Запуск выгрузки ---")
-        logger.info(f"Чат: {chat_title}")
-        logger.info(f"Период: {s_str} - {e_str}")
-        logger.info(f"Файл: {output_file}")
+        logger.info(f"--- Starting export for user {user_id} ---")
+        logger.info(f"Chat: {chat_title}")
+        logger.info(f"Period: {s_str} - {e_str}")
+        logger.info(f"File: {output_file}")
 
         messages_data = []
         message_count = 0
+
+        # Получить настройки фильтрации из БД
+        exclude_user_id = settings.exclude_user_id if settings else 0
+        exclude_username = settings.exclude_username if settings else ""
 
         # Выгрузка сообщений
         async for msg in client.iter_messages(entity, limit=limit, offset_date=parsed_end_date):
@@ -156,8 +152,8 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
             if not msg.message:
                 continue
 
-            # Исключение по User ID
-            if EXCLUDE_USER_ID and EXCLUDE_USER_ID != 0 and msg.sender_id == EXCLUDE_USER_ID:
+            # Исключение по User ID (из настроек пользователя)
+            if exclude_user_id and exclude_user_id != 0 and msg.sender_id == exclude_user_id:
                 continue
 
             sender = "Unknown"
@@ -169,8 +165,8 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
                 elif hasattr(msg.sender, 'title'):
                     sender = msg.sender.title
 
-            # Исключение по Username
-            if EXCLUDE_USERNAME and EXCLUDE_USERNAME.strip() and EXCLUDE_USERNAME.lower() in sender.lower():
+            # Исключение по Username (из настроек пользователя)
+            if exclude_username and exclude_username.strip() and exclude_username.lower() in sender.lower():
                 continue
 
             clean_text = msg.message.replace('\n', ' ').replace('\r', ' ').strip()
@@ -183,11 +179,12 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
 
             message_count += 1
             if message_count % 100 == 0:
-                logger.info(f"Обработано сообщений: {message_count}")
+                logger.info(f"Processed messages: {message_count}")
 
-        # Сохранение в CSV
-        os.makedirs(EXPORT_FOLDER, exist_ok=True)
-        output_filepath = os.path.join(EXPORT_FOLDER, output_file)
+        # Создать per-user папку для экспортов
+        user_export_folder = os.path.join("data", "users", str(user_id), "exports")
+        os.makedirs(user_export_folder, exist_ok=True)
+        output_filepath = os.path.join(user_export_folder, output_file)
 
         fieldnames = ['Date', 'From', 'Text']
         with open(output_filepath, 'w', newline='', encoding='utf-8-sig') as f:
@@ -195,17 +192,14 @@ async def export_telegram_csv(chat: str, start_date: str = None, end_date: str =
             writer.writeheader()
             writer.writerows(messages_data)
 
-        logger.info(f"✅ Экспорт завершен: {output_filepath}")
-        logger.info(f"📊 Экспортировано сообщений: {len(messages_data)}")
-        return output_file
+        logger.info(f"✅ Export completed: {output_filepath}")
+        logger.info(f"📊 Exported messages: {len(messages_data)}")
+
+        # Вернуть полный путь к файлу
+        return output_filepath
 
     except Exception as e:
-        logger.error(f"❌ Ошибка при экспорте: {e}")
+        logger.error(f"❌ Export error for user {user_id}: {e}", exc_info=True)
         raise
     finally:
         await client.disconnect()
-
-
-if __name__ == "__main__":
-    # Тестовый запуск
-    asyncio.run(export_telegram_csv("@ysellchat"))

@@ -10,7 +10,8 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # Импорт конфигурации
-from core.config import BOT_TOKEN
+from core.config import BOT_TOKEN, reload_config
+from core.first_run_setup import check_bot_token_configured, run_first_time_setup
 
 # Импорт обработчиков
 from bot.handlers import start, export, analyze, setup
@@ -31,6 +32,31 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """Главная функция запуска бота"""
+
+    # Проверка первого запуска и настройка
+    if not check_bot_token_configured():
+        print("\n" + "=" * 60)
+        print("⚠️  Первый запуск - необходима настройка")
+        print("=" * 60)
+        print()
+
+        success = run_first_time_setup()
+        if not success:
+            print("\n❌ Настройка отменена или не удалась")
+            print("Запустите бота снова для повторной настройки")
+            sys.exit(1)
+
+        # Перезагрузить конфигурацию после настройки
+        reload_config()
+
+        # Импортировать обновленный BOT_TOKEN
+        from core.config import BOT_TOKEN as UPDATED_TOKEN
+        global BOT_TOKEN
+        BOT_TOKEN = UPDATED_TOKEN
+
+        print("\n✅ Настройка завершена успешно!")
+        print("=" * 60)
+        print()
 
     # Проверка обязательных параметров
     if not BOT_TOKEN:

@@ -86,13 +86,21 @@ async def main():
     logger.info("Нажмите Ctrl+C для остановки")
     logger.info("=" * 60)
 
+    # Импорт и инициализация worker
+    from services.task_worker import TaskWorker
+    worker = TaskWorker()
+
     try:
-        # Запуск polling (long polling)
-        await dp.start_polling(bot)
+        # Запуск бота и worker параллельно
+        await asyncio.gather(
+            dp.start_polling(bot),
+            worker.start()
+        )
     except KeyboardInterrupt:
         logger.info("Получен сигнал остановки")
     finally:
         logger.info("Закрытие соединений...")
+        await worker.stop()
         await bot.session.close()
         logger.info("✅ Бот остановлен")
 

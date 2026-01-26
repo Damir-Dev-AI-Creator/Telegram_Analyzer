@@ -133,13 +133,32 @@ class TaskWorker:
         except Exception as e:
             logger.error(f"❌ Ошибка при экспорте задачи #{task.task_id}: {e}", exc_info=True)
 
-            await self.bot.send_message(
-                user_id,
-                f"❌ <b>Ошибка экспорта</b>\n\n"
-                f"🆔 Задача: #{task.task_id}\n"
-                f"📱 Чат: <code>{chat_id}</code>\n\n"
-                f"Ошибка: {str(e)}"
-            )
+            # Формируем сообщение об ошибке
+            error_message = str(e)
+
+            # Специальная обработка для частых ошибок
+            if "не являетесь участником" in error_message.lower() or "not part of" in error_message.lower():
+                # Пользователь не в чате - уже понятное сообщение из telegram.py
+                await self.bot.send_message(
+                    user_id,
+                    f"❌ <b>Ошибка экспорта</b>\n\n"
+                    f"🆔 Задача: #{task.task_id}\n\n"
+                    f"{error_message}\n\n"
+                    f"<b>Как исправить:</b>\n"
+                    f"1. Откройте чат в Telegram\n"
+                    f"2. Вступите в чат/канал\n"
+                    f"3. Повторите команду /export"
+                )
+            else:
+                # Другие ошибки
+                await self.bot.send_message(
+                    user_id,
+                    f"❌ <b>Ошибка экспорта</b>\n\n"
+                    f"🆔 Задача: #{task.task_id}\n"
+                    f"📱 Чат: <code>{chat_id}</code>\n\n"
+                    f"Ошибка: {error_message}\n\n"
+                    f"Используйте /help для справки или обратитесь к администратору."
+                )
 
             await task_queue.mark_failed(task.task_id)
 
@@ -357,12 +376,31 @@ class TaskWorker:
         except Exception as e:
             logger.error(f"❌ Ошибка при экспорт+анализ задачи #{task.task_id}: {e}", exc_info=True)
 
-            await self.bot.send_message(
-                user_id,
-                f"❌ <b>Ошибка</b>\n\n"
-                f"🆔 Задача: #{task.task_id}\n"
-                f"📱 Чат: <code>{chat_id}</code>\n\n"
-                f"Ошибка: {str(e)}"
-            )
+            # Формируем сообщение об ошибке
+            error_message = str(e)
+
+            # Специальная обработка для частых ошибок
+            if "не являетесь участником" in error_message.lower() or "not part of" in error_message.lower():
+                # Пользователь не в чате
+                await self.bot.send_message(
+                    user_id,
+                    f"❌ <b>Ошибка экспорта</b>\n\n"
+                    f"🆔 Задача: #{task.task_id}\n\n"
+                    f"{error_message}\n\n"
+                    f"<b>Как исправить:</b>\n"
+                    f"1. Откройте чат в Telegram\n"
+                    f"2. Вступите в чат/канал\n"
+                    f"3. Повторите команду /exportanalyze"
+                )
+            else:
+                # Другие ошибки
+                await self.bot.send_message(
+                    user_id,
+                    f"❌ <b>Ошибка</b>\n\n"
+                    f"🆔 Задача: #{task.task_id}\n"
+                    f"📱 Чат: <code>{chat_id}</code>\n\n"
+                    f"Ошибка: {error_message}\n\n"
+                    f"Используйте /help для справки или обратитесь к администратору."
+                )
 
             await task_queue.mark_failed(task.task_id)

@@ -119,7 +119,24 @@ async def export_telegram_csv(
 
         logger.info(f"✅ User {user_id} authorized in Telegram")
 
-        entity = await client.get_entity(chat)
+        # Получить информацию о чате с обработкой ошибок
+        try:
+            entity = await client.get_entity(chat)
+        except ValueError as e:
+            error_msg = str(e).lower()
+            if "not part of" in error_msg or "cannot get entity" in error_msg:
+                raise ValueError(
+                    f"❌ Вы не являетесь участником этого чата.\n\n"
+                    f"📱 Чат: {chat}\n\n"
+                    f"Для экспорта чата необходимо:\n"
+                    f"1. Вступить в чат/группу/канал в Telegram\n"
+                    f"2. После вступления повторить команду экспорта\n\n"
+                    f"💡 Telegram API не позволяет экспортировать чаты, где вы не состоите."
+                )
+            else:
+                raise ValueError(f"Не удалось получить информацию о чате: {e}")
+        except Exception as e:
+            raise ValueError(f"Ошибка при получении чата: {e}")
 
         # Определяем имя чата для названия файла
         chat_title = getattr(entity, 'title', getattr(entity, 'username', 'chat'))

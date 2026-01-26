@@ -16,6 +16,9 @@ python-docx>=1.2.0         # DOCX creation (latest stable)
 customtkinter>=5.2.2       # Modern Tkinter UI (latest version, maintenance inactive)
 Pillow>=12.0.0             # Image support for CTk (security patches, CVE-2025-48379)
 
+# Telegram Bot
+aiogram>=3.15.0            # Async Telegram Bot framework
+
 # Optional: Enhanced UX
 # tkcalendar>=1.6.1        # Date picker widget
 # tkinterdnd2>=0.3.0       # Drag & drop support

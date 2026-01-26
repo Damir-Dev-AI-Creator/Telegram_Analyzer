@@ -243,13 +243,37 @@ railway run bash -c "cat data/telegram_analyzer.db" > backup.db
    - Deployments → Build Logs
    - Все ли зависимости установлены?
 
-### "ModuleNotFoundError":
+### "ModuleNotFoundError" или "ERROR: Could not find a version":
 
-Проблема с зависимостями в `requirements.txt`:
+Проблема с зависимостями в `requirements-server.txt`:
 
-1. Проверьте что все зависимости указаны
-2. Убедитесь что нет опечаток
-3. Пересоберите проект: Deployments → "Redeploy"
+**Решение 1: Обновить pip (в Dockerfile)**
+Убедитесь что Dockerfile обновляет pip:
+```dockerfile
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+```
+
+**Решение 2: Использовать минимальные требования**
+Если основные зависимости не устанавливаются, измените в `Dockerfile`:
+
+```dockerfile
+# Было:
+COPY requirements-server.txt .
+RUN pip install --no-cache-dir -r requirements-server.txt
+
+# Стало:
+COPY requirements-minimal.txt .
+RUN pip install --no-cache-dir -r requirements-minimal.txt
+```
+
+**Решение 3: Использовать Dockerfile.minimal**
+В Railway Settings:
+1. Settings → Build
+2. Dockerfile Path: `Dockerfile.minimal`
+3. Redeploy
+
+**Решение 4: Пересоберите проект**
+Deployments → "Redeploy"
 
 ### Бот не отвечает:
 

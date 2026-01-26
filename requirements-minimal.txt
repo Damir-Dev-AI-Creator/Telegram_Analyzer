@@ -1,0 +1,31 @@
+# Minimal Dependencies (гарантированная установка)
+# Используйте этот файл если requirements-server.txt не работает
+
+# Core (без версионных ограничений)
+telethon
+pandas
+python-dotenv
+
+# AI Integration
+anthropic
+
+# Document Generation
+python-docx
+lxml
+
+# Telegram Bot
+aiogram
+aiohttp
+magic-filter
+
+# Database
+sqlalchemy
+aiosqlite
+greenlet
+
+# Security
+cryptography
+
+# QR codes
+qrcode
+Pillow

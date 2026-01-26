@@ -1,0 +1,32 @@
+# Минимальный Dockerfile (используйте если основной не работает)
+FROM python:3.11-slim
+
+# Установить только необходимые системные зависимости
+RUN apt-get update && apt-get install -y \
+    gcc \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Рабочая директория
+WORKDIR /app
+
+# Копировать minimal requirements
+COPY requirements-minimal.txt .
+
+# Обновить pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Установить зависимости
+RUN pip install --no-cache-dir -r requirements-minimal.txt
+
+# Копировать весь проект
+COPY . .
+
+# Создать необходимые директории
+RUN mkdir -p data logs data/users
+
+# Переменные окружения
+ENV PYTHONUNBUFFERED=1
+
+# Запуск бота
+CMD ["python", "main.py", "--bot"]

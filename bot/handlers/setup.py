@@ -1,20 +1,21 @@
 # bot/handlers/setup.py
-"""Обработчики процесса настройки (onboarding) пользователя"""
+"""Обработчики процесса настройки (onboarding) пользователя с QR-авторизацией"""
 
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, BufferedInputFile
 import logging
 import re
+import asyncio
+import qrcode
+from io import BytesIO
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import (
-    PhoneCodeInvalidError,
-    PhoneCodeExpiredError,
     SessionPasswordNeededError,
-    PasswordHashInvalidError,
-    ApiIdInvalidError
+    ApiIdInvalidError,
+    SessionRevokedError
 )
 
 from bot.states.setup_states import SetupStates
@@ -86,7 +87,7 @@ async def cmd_setup(message: Message, state: FSMContext):
         "1️⃣ <b>Telegram API ключи</b> (обязательно)\n"
         "   • API ID\n"
         "   • API Hash\n"
-        "   • Номер телефона\n\n"
+        "   • Авторизация через QR-код\n\n"
         "2️⃣ <b>Claude API ключ</b> (опционально)\n"
         "   • Нужен только для функции анализа\n"
         "   • Можно добавить позже через /settings\n\n"
@@ -183,7 +184,7 @@ async def process_api_id(message: Message, state: FSMContext):
 
 @router.message(SetupStates.waiting_api_hash)
 async def process_api_hash(message: Message, state: FSMContext):
-    """Обработка API_HASH"""
+    """Обработка API_HASH и запуск QR-авторизации"""
     api_hash = message.text.strip()
 
     # Валидация: должен быть строкой 32 символа (hex)
@@ -211,72 +212,35 @@ async def process_api_hash(message: Message, state: FSMContext):
     # Сохранить API_HASH во временное хранилище FSM
     await state.update_data(api_hash=api_hash)
 
+    # Получить API_ID
+    data = await state.get_data()
+    api_id = data['api_id']
+
     await message.answer(
         "✅ API Hash сохранен\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "<b>Шаг 2/3: Авторизация в Telegram</b>\n\n"
-        "Отправьте мне ваш <b>номер телефона</b> в международном формате:\n\n"
-        "Примеры:\n"
-        "• <code>+79991234567</code> (Россия)\n"
-        "• <code>+380991234567</code> (Украина)\n"
-        "• <code>+1234567890</code> (США)\n\n"
-        "<b>⚠️ Важно:</b> Номер должен начинаться с <code>+</code>"
-    )
-
-    await state.set_state(SetupStates.waiting_phone)
-
-
-# ======================= ШАГ 3: PHONE =======================
-
-@router.message(SetupStates.waiting_phone)
-async def process_phone(message: Message, state: FSMContext):
-    """Обработка номера телефона и отправка кода авторизации"""
-    phone = message.text.strip()
-
-    # Валидация: должен начинаться с +
-    if not phone.startswith('+'):
-        await message.answer(
-            "❌ <b>Ошибка!</b>\n\n"
-            "Номер телефона должен начинаться с <code>+</code>\n\n"
-            "Примеры:\n"
-            "• <code>+79991234567</code>\n"
-            "• <code>+380991234567</code>\n\n"
-            "Попробуйте еще раз или отправьте /cancel для отмены."
-        )
-        return
-
-    # Проверить, что после + идут только цифры
-    if not phone[1:].isdigit():
-        await message.answer(
-            "❌ <b>Ошибка!</b>\n\n"
-            "После <code>+</code> должны быть только цифры\n\n"
-            "Попробуйте еще раз или отправьте /cancel для отмены."
-        )
-        return
-
-    # Проверить длину (обычно от 10 до 15 цифр)
-    if len(phone) < 10 or len(phone) > 16:
-        await message.answer(
-            "⚠️ <b>Предупреждение</b>\n\n"
-            "Номер телефона выглядит необычно.\n"
-            "Обычная длина: 11-15 символов (с кодом страны)\n\n"
-            f"Вы ввели: <code>{phone}</code> ({len(phone)} символов)\n\n"
-            "Отправьте правильное значение или /cancel для отмены."
-        )
-        return
-
-    # Сохранить phone
-    await state.update_data(phone=phone)
-
-    # Получить сохраненные данные
-    data = await state.get_data()
-    api_id = data['api_id']
-    api_hash = data['api_hash']
-
-    await message.answer(
-        "⏳ <b>Подключение к Telegram...</b>\n\n"
+        "<b>Шаг 2/3: Авторизация в Telegram через QR-код</b>\n\n"
+        "⏳ Генерирую QR-код для авторизации...\n\n"
         "Пожалуйста, подождите..."
     )
+
+    # Запустить QR-авторизацию
+    await start_qr_auth(message, state, api_id, api_hash)
+
+
+# ======================= ШАГ 3: QR-АВТОРИЗАЦИЯ =======================
+
+async def start_qr_auth(message: Message, state: FSMContext, api_id: int, api_hash: str):
+    """
+    Запуск QR-авторизации через Telethon
+
+    Args:
+        message: Сообщение пользователя
+        state: FSM контекст
+        api_id: Telegram API ID
+        api_hash: Telegram API Hash
+    """
+    user_id = message.from_user.id
 
     try:
         # Создать Telethon клиент
@@ -291,31 +255,55 @@ async def process_phone(message: Message, state: FSMContext):
 
         await client.connect()
 
-        # Отправить код авторизации
-        sent_code = await client.send_code_request(phone)
+        # Запустить QR-авторизацию
+        qr_login = await client.qr_login()
 
-        # Сохранить session_string и phone_code_hash
-        session_string = client.session.save()
-        await state.update_data(
-            session_string=session_string,
-            phone_code_hash=sent_code.phone_code_hash
+        # Получить URL для QR-кода
+        qr_url = qr_login.url
+
+        logger.info(f"QR login started for user {user_id}, URL: {qr_url}")
+
+        # Создать QR-код
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(qr_url)
+        qr.make(fit=True)
+
+        # Создать изображение QR-кода
+        qr_image = qr.make_image(fill_color="black", back_color="white")
+
+        # Сохранить в BytesIO
+        bio = BytesIO()
+        qr_image.save(bio, format='PNG')
+        bio.seek(0)
+
+        # Отправить QR-код пользователю
+        qr_file = BufferedInputFile(bio.read(), filename="telegram_qr.png")
+
+        await message.answer_photo(
+            photo=qr_file,
+            caption=(
+                "📱 <b>QR-код для авторизации готов!</b>\n\n"
+                "<b>Как авторизоваться:</b>\n\n"
+                "1️⃣ Откройте Telegram на телефоне\n"
+                "2️⃣ Перейдите: <b>Настройки → Устройства</b>\n"
+                "3️⃣ Нажмите <b>Привязать устройство</b>\n"
+                "4️⃣ Отсканируйте этот QR-код\n\n"
+                "⏳ <b>Жду авторизации...</b>\n\n"
+                "QR-код действителен <b>5 минут</b>\n\n"
+                "Отправьте /cancel для отмены"
+            )
         )
 
-        await client.disconnect()
+        # Перейти в состояние ожидания сканирования
+        await state.set_state(SetupStates.waiting_qr_scan)
 
-        await message.answer(
-            "✅ <b>Код отправлен!</b>\n\n"
-            f"Telegram отправил код подтверждения на номер:\n"
-            f"<code>{phone}</code>\n\n"
-            "Отправьте мне этот код (например: <code>12345</code>)\n\n"
-            "<b>⚠️ Важно:</b>\n"
-            "• Код действителен 3-5 минут\n"
-            "• Если код не пришел, отправьте /cancel и попробуйте еще раз"
-        )
-
-        await state.set_state(SetupStates.waiting_code)
-
-        logger.info(f"Authorization code sent to user {message.from_user.id}")
+        # Запустить фоновую задачу ожидания авторизации
+        asyncio.create_task(wait_for_qr_auth(message, state, client, qr_login, user_id))
 
     except ApiIdInvalidError:
         await message.answer(
@@ -325,185 +313,50 @@ async def process_phone(message: Message, state: FSMContext):
             "Начните настройку заново: /setup"
         )
         await state.clear()
-        logger.error(f"Invalid API credentials for user {message.from_user.id}")
+        logger.error(f"Invalid API credentials for user {user_id}")
 
     except Exception as e:
         await message.answer(
-            f"❌ <b>Ошибка подключения</b>\n\n"
-            f"Не удалось отправить код авторизации.\n\n"
+            f"❌ <b>Ошибка создания QR-кода</b>\n\n"
             f"Ошибка: <code>{str(e)}</code>\n\n"
             "Попробуйте еще раз: /setup"
         )
         await state.clear()
-        logger.error(f"Error sending code to user {message.from_user.id}: {e}", exc_info=True)
+        logger.error(f"Error starting QR auth for user {user_id}: {e}", exc_info=True)
 
 
-# ======================= ШАГ 4: CODE =======================
+async def wait_for_qr_auth(message: Message, state: FSMContext, client: TelegramClient, qr_login, user_id: int):
+    """
+    Фоновая задача ожидания авторизации через QR-код
 
-@router.message(SetupStates.waiting_code)
-async def process_code(message: Message, state: FSMContext):
-    """Обработка кода подтверждения"""
-    code = message.text.strip().replace('-', '').replace(' ', '')
-
-    # Валидация: должен быть только цифры
-    if not code.isdigit():
-        await message.answer(
-            "❌ <b>Ошибка!</b>\n\n"
-            "Код должен состоять только из цифр\n\n"
-            "Попробуйте еще раз или отправьте /cancel для отмены."
-        )
-        return
-
-    # Получить сохраненные данные
-    data = await state.get_data()
-    api_id = data['api_id']
-    api_hash = data['api_hash']
-    phone = data['phone']
-    session_string = data['session_string']
-    phone_code_hash = data.get('phone_code_hash')
-
-    await message.answer(
-        "⏳ <b>Проверка кода...</b>\n\n"
-        "Пожалуйста, подождите..."
-    )
-
+    Args:
+        message: Сообщение пользователя
+        state: FSM контекст
+        client: Telethon клиент
+        qr_login: QR login объект
+        user_id: ID пользователя
+    """
     try:
-        # Создать клиент с существующей сессией
-        client = TelegramClient(
-            StringSession(session_string),
-            api_id,
-            api_hash
-        )
+        # Ждать авторизации с таймаутом 5 минут
+        await asyncio.wait_for(qr_login.wait(), timeout=300)
 
-        await client.connect()
+        # Авторизация успешна!
+        logger.info(f"User {user_id} successfully authorized via QR")
 
-        try:
-            # Попытка авторизации с кодом
-            await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+        # Получить информацию о пользователе
+        me = await client.get_me()
+        phone = me.phone
 
-            # Успешная авторизация!
-            session_string = client.session.save()
-
-            await client.disconnect()
-
-            # Сохранить в базу данных
-            user_id = message.from_user.id
-            db = get_db_manager()
-
-            await db.update_user(
-                user_id=user_id,
-                api_id=api_id,
-                api_hash=api_hash,
-                phone=phone,
-                session_string=session_string,
-                is_authorized=True
-            )
-
-            logger.info(f"User {user_id} successfully authorized in Telegram")
-
-            # Переход к опциональной настройке Claude API
-            await message.answer(
-                "✅ <b>Успешно авторизован!</b>\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                "<b>Шаг 3/3: Claude API (опционально)</b>\n\n"
-                "Claude API используется для анализа переписок.\n\n"
-                "<b>Как получить ключ:</b>\n"
-                "1️⃣ Перейдите: https://console.anthropic.com/\n"
-                "2️⃣ Зарегистрируйтесь или войдите\n"
-                "3️⃣ Перейдите в API Keys\n"
-                "4️⃣ Создайте новый ключ\n\n"
-                "Отправьте мне ваш <b>Claude API ключ</b>\n"
-                "или нажмите <b>Пропустить</b> (можно добавить позже через /settings)",
-                reply_markup=ReplyKeyboardMarkup(
-                    keyboard=[[KeyboardButton(text="⏭️ Пропустить")]],
-                    resize_keyboard=True,
-                    one_time_keyboard=True
-                )
-            )
-
-            await state.set_state(SetupStates.waiting_claude_key)
-
-        except SessionPasswordNeededError:
-            # Нужен пароль 2FA
-            await client.disconnect()
-
-            await message.answer(
-                "🔐 <b>Требуется пароль двухфакторной аутентификации</b>\n\n"
-                "У вас включена двухфакторная аутентификация (2FA).\n\n"
-                "Отправьте мне ваш <b>пароль</b> от Telegram:"
-            )
-
-            await state.set_state(SetupStates.waiting_password)
-            logger.info(f"User {message.from_user.id} needs 2FA password")
-
-    except (PhoneCodeInvalidError, PhoneCodeExpiredError) as e:
-        await message.answer(
-            "❌ <b>Неверный или устаревший код</b>\n\n"
-            "Возможные причины:\n"
-            "• Код введен неправильно\n"
-            "• Код устарел (более 3-5 минут)\n\n"
-            "Начните настройку заново: /setup"
-        )
-        await state.clear()
-        logger.error(f"Invalid/expired code for user {message.from_user.id}: {e}")
-
-    except Exception as e:
-        await message.answer(
-            f"❌ <b>Ошибка авторизации</b>\n\n"
-            f"Ошибка: <code>{str(e)}</code>\n\n"
-            "Попробуйте еще раз: /setup"
-        )
-        await state.clear()
-        logger.error(f"Error during sign in for user {message.from_user.id}: {e}", exc_info=True)
-
-
-# ======================= ШАГ 5: PASSWORD (2FA) =======================
-
-@router.message(SetupStates.waiting_password)
-async def process_password(message: Message, state: FSMContext):
-    """Обработка пароля 2FA"""
-    password = message.text.strip()
-
-    # Удалить сообщение с паролем для безопасности
-    try:
-        await message.delete()
-    except Exception:
-        pass  # Игнорируем ошибку если не удалось удалить
-
-    # Получить сохраненные данные
-    data = await state.get_data()
-    api_id = data['api_id']
-    api_hash = data['api_hash']
-    phone = data['phone']
-    session_string = data['session_string']
-
-    status_msg = await message.answer(
-        "⏳ <b>Проверка пароля...</b>\n\n"
-        "Пожалуйста, подождите..."
-    )
-
-    try:
-        # Создать клиент с существующей сессией
-        client = TelegramClient(
-            StringSession(session_string),
-            api_id,
-            api_hash
-        )
-
-        await client.connect()
-
-        # Попытка авторизации с паролем
-        await client.sign_in(password=password)
-
-        # Успешная авторизация!
+        # Сохранить session string
         session_string = client.session.save()
 
-        await client.disconnect()
+        # Получить API credentials
+        data = await state.get_data()
+        api_id = data['api_id']
+        api_hash = data['api_hash']
 
         # Сохранить в базу данных
-        user_id = message.from_user.id
         db = get_db_manager()
-
         await db.update_user(
             user_id=user_id,
             api_id=api_id,
@@ -513,10 +366,13 @@ async def process_password(message: Message, state: FSMContext):
             is_authorized=True
         )
 
-        logger.info(f"User {user_id} successfully authorized with 2FA")
+        await client.disconnect()
 
-        await status_msg.edit_text(
+        # Уведомить пользователя
+        await message.answer(
             "✅ <b>Успешно авторизован!</b>\n\n"
+            f"📱 Телефон: <code>{phone}</code>\n"
+            f"👤 Имя: {me.first_name or 'Unknown'}\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "<b>Шаг 3/3: Claude API (опционально)</b>\n\n"
             "Claude API используется для анализа переписок.\n\n"
@@ -526,11 +382,7 @@ async def process_password(message: Message, state: FSMContext):
             "3️⃣ Перейдите в API Keys\n"
             "4️⃣ Создайте новый ключ\n\n"
             "Отправьте мне ваш <b>Claude API ключ</b>\n"
-            "или нажмите <b>Пропустить</b> (можно добавить позже через /settings)"
-        )
-
-        await message.answer(
-            "⏭️ Пропустить",
+            "или нажмите <b>Пропустить</b> (можно добавить позже через /settings)",
             reply_markup=ReplyKeyboardMarkup(
                 keyboard=[[KeyboardButton(text="⏭️ Пропустить")]],
                 resize_keyboard=True,
@@ -540,24 +392,64 @@ async def process_password(message: Message, state: FSMContext):
 
         await state.set_state(SetupStates.waiting_claude_key)
 
-    except PasswordHashInvalidError:
-        await status_msg.edit_text(
-            "❌ <b>Неверный пароль</b>\n\n"
-            "Попробуйте еще раз или отправьте /cancel для отмены."
+    except asyncio.TimeoutError:
+        # Таймаут - QR не был отсканирован
+        logger.warning(f"QR auth timeout for user {user_id}")
+
+        await client.disconnect()
+        await state.clear()
+
+        await message.answer(
+            "⏱️ <b>Время истекло</b>\n\n"
+            "QR-код не был отсканирован в течение 5 минут.\n\n"
+            "Начните настройку заново: /setup",
+            reply_markup=ReplyKeyboardRemove()
         )
-        logger.error(f"Invalid 2FA password for user {message.from_user.id}")
+
+    except SessionRevokedError:
+        logger.error(f"Session revoked during QR auth for user {user_id}")
+
+        await client.disconnect()
+        await state.clear()
+
+        await message.answer(
+            "❌ <b>Сессия отозвана</b>\n\n"
+            "Возможно, вы отменили авторизацию в приложении.\n\n"
+            "Начните настройку заново: /setup",
+            reply_markup=ReplyKeyboardRemove()
+        )
 
     except Exception as e:
-        await status_msg.edit_text(
+        logger.error(f"Error during QR auth wait for user {user_id}: {e}", exc_info=True)
+
+        try:
+            await client.disconnect()
+        except:
+            pass
+
+        await state.clear()
+
+        await message.answer(
             f"❌ <b>Ошибка авторизации</b>\n\n"
             f"Ошибка: <code>{str(e)}</code>\n\n"
-            "Попробуйте еще раз: /setup"
+            "Попробуйте еще раз: /setup",
+            reply_markup=ReplyKeyboardRemove()
         )
-        await state.clear()
-        logger.error(f"Error during 2FA for user {message.from_user.id}: {e}", exc_info=True)
 
 
-# ======================= ШАГ 6: CLAUDE API (OPTIONAL) =======================
+@router.message(SetupStates.waiting_qr_scan)
+async def process_qr_scan_waiting(message: Message, state: FSMContext):
+    """Обработка сообщений во время ожидания QR-сканирования"""
+    # Пользователь отправил сообщение во время ожидания
+    await message.answer(
+        "⏳ <b>Ожидание авторизации...</b>\n\n"
+        "Пожалуйста, отсканируйте QR-код в приложении Telegram.\n\n"
+        "Если QR-код не виден, прокрутите вверх.\n\n"
+        "Отправьте /cancel для отмены настройки."
+    )
+
+
+# ======================= CLAUDE API =======================
 
 @router.message(SetupStates.waiting_claude_key, F.text == "⏭️ Пропустить")
 async def skip_claude_key(message: Message, state: FSMContext):

@@ -10,11 +10,9 @@ class SetupStates(StatesGroup):
     # Сбор Telegram API ключей
     waiting_api_id = State()      # Ожидание API_ID
     waiting_api_hash = State()    # Ожидание API_HASH
-    waiting_phone = State()       # Ожидание номера телефона
 
-    # Авторизация в Telegram
-    waiting_code = State()        # Ожидание кода подтверждения
-    waiting_password = State()    # Ожидание пароля 2FA (если включен)
+    # Авторизация в Telegram через QR-код
+    waiting_qr_scan = State()     # Ожидание сканирования QR-кода
 
     # Опциональная настройка Claude API
     waiting_claude_key = State()  # Ожидание Claude API ключа (опционально)

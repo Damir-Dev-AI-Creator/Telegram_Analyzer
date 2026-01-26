@@ -23,6 +23,7 @@ aiogram>=3.15.0            # Async Telegram Bot framework
 sqlalchemy[asyncio]>=2.0.36  # Async ORM for database
 aiosqlite>=0.20.0            # Async SQLite driver
 cryptography>=43.0.3         # Session encryption
+qrcode>=8.0                  # QR code generation for Telegram auth
 
 # Optional: Enhanced UX
 # tkcalendar>=1.6.1        # Date picker widget

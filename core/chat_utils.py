@@ -35,15 +35,7 @@ def parse_chat_identifier(chat_input: str) -> str:
     if chat_input.lstrip('-').isdigit():
         return chat_input
 
-    # 2. Парсинг ссылок t.me
-    # Публичные ссылки: https://t.me/channelname или t.me/channelname
-    tme_pattern = r'(?:https?://)?t\.me/([a-zA-Z0-9_]+)'
-    match = re.match(tme_pattern, chat_input)
-    if match:
-        username = match.group(1)
-        return username  # Возвращаем без @, Telethon работает с обоими форматами
-
-    # 3. Приватные ссылки с + (joinchat)
+    # 2. Приватные ссылки с + или joinchat (ПРОВЕРЯЕМ ПЕРВЫМИ!)
     # https://t.me/+ABC123xyz или https://t.me/joinchat/ABC123xyz
     private_pattern = r'(?:https?://)?t\.me/(?:\+|joinchat/)([a-zA-Z0-9_-]+)'
     match = re.match(private_pattern, chat_input)
@@ -53,6 +45,14 @@ def parse_chat_identifier(chat_input: str) -> str:
             return chat_input
         else:
             return f"https://t.me/+{match.group(1)}"
+
+    # 3. Публичные ссылки t.me
+    # https://t.me/channelname или t.me/channelname
+    tme_pattern = r'(?:https?://)?t\.me/([a-zA-Z0-9_]+)'
+    match = re.match(tme_pattern, chat_input)
+    if match:
+        username = match.group(1)
+        return username  # Возвращаем без @, Telethon работает с обоими форматами
 
     # 4. Username с @ или без
     # @channelname или channelname

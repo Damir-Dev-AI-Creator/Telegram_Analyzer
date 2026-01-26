@@ -120,8 +120,11 @@ async def export_telegram_csv(
         logger.info(f"✅ User {user_id} authorized in Telegram")
 
         # Получить информацию о чате с обработкой ошибок
+        logger.info(f"🔍 Attempting to get entity for chat: {chat} (type: {type(chat).__name__})")
+
         try:
             entity = await client.get_entity(chat)
+            logger.info(f"✅ Successfully got entity: {getattr(entity, 'title', getattr(entity, 'username', 'unknown'))}")
         except ValueError as e:
             error_msg = str(e).lower()
             if "not part of" in error_msg or "cannot get entity" in error_msg:

@@ -40,23 +40,35 @@ def setup_paths():
         sys.path.insert(0, script_dir)
 
 
-def check_dependencies_quick():
-    """Быстрая проверка критических зависимостей"""
+def check_dependencies_quick(mode='gui'):
+    """Быстрая проверка критических зависимостей
+
+    Args:
+        mode: 'gui' для GUI режима (с customtkinter), 'bot' для бота (без GUI)
+    """
+    # Базовые зависимости для всех режимов
     critical_packages = {
-        'customtkinter': 'customtkinter',
         'telethon': 'telethon',
         'pandas': 'pandas',
         'anthropic': 'anthropic',
         'docx': 'python-docx',
     }
-    
+
+    # Добавить GUI зависимости только для GUI режима
+    if mode == 'gui':
+        critical_packages['customtkinter'] = 'customtkinter'
+
+    # Добавить bot зависимости только для bot режима
+    if mode == 'bot':
+        critical_packages['aiogram'] = 'aiogram'
+
     missing = []
     for module, package in critical_packages.items():
         try:
             __import__(module)
         except ImportError:
             missing.append(package)
-    
+
     if missing:
         print("❌ Отсутствуют критические зависимости:")
         print(f"   {', '.join(missing)}")
@@ -64,10 +76,14 @@ def check_dependencies_quick():
         print("Установите зависимости командой:")
         print(f"   pip install {' '.join(missing)}")
         print()
-        print("Или установите все сразу:")
-        print("   pip install -r requirements.txt")
+        if mode == 'bot':
+            print("Или установите серверные зависимости:")
+            print("   pip install -r requirements-server.txt")
+        else:
+            print("Или установите все сразу:")
+            print("   pip install -r requirements.txt")
         return False
-    
+
     return True
 
 
@@ -238,19 +254,17 @@ def main():
             sys.exit(0)
         
         if arg in ['--paths', '-p']:
-            if not check_dependencies_quick():
-                sys.exit(1)
+            # Для показа путей не требуются все зависимости
             show_paths()
             sys.exit(0)
-        
+
         if arg in ['--init', '-i']:
-            if not check_dependencies_quick():
-                sys.exit(1)
+            # Для инициализации не требуются все зависимости
             run_init_only()
         
         if arg in ['--bot', '-b']:
             print("🤖 Запуск Telegram бота...")
-            if not check_dependencies_quick():
+            if not check_dependencies_quick(mode='bot'):
                 sys.exit(1)
             try:
                 run_bot()
@@ -264,7 +278,7 @@ def main():
 
         if arg in ['--console', '-c']:
             print("📟 Запуск в консольном режиме...")
-            if not check_dependencies_quick():
+            if not check_dependencies_quick(mode='gui'):  # Console может использовать GUI для setup
                 sys.exit(1)
             try:
                 run_console()

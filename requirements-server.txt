@@ -1,0 +1,23 @@
+# Server Dependencies (без GUI компонентов)
+# Используйте этот файл для развертывания на сервере
+# Install: pip install -r requirements-server.txt
+
+# Core
+telethon>=1.42.0           # Telegram API client
+pandas>=2.3.0              # Data processing
+python-dotenv>=1.2.0       # Environment variables
+
+# AI Integration (Claude API)
+anthropic>=0.76.0          # Claude API client
+
+# Document Generation
+python-docx>=1.2.0         # DOCX creation
+
+# Telegram Bot
+aiogram>=3.15.0            # Async Telegram Bot framework
+
+# Database (Multi-User Support)
+sqlalchemy[asyncio]>=2.0.36  # Async ORM for database
+aiosqlite>=0.20.0            # Async SQLite driver
+cryptography>=43.0.3         # Session encryption
+qrcode>=8.0                  # QR code generation for Telegram auth

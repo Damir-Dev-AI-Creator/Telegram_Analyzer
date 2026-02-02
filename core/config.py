@@ -180,6 +180,7 @@ OWNER_ID: int = _get_int("OWNER_ID", 0)
 EXPORT_FOLDER: str = str(get_input_folder())
 OUTPUT_FOLDER: str = str(get_output_folder())
 SESSION_PATH: str = str(get_session_path())
+SESSION_FILE: str = SESSION_PATH  # Alias for backward compatibility
 
 
 # ============================================================================

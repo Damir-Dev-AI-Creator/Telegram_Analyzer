@@ -407,7 +407,7 @@ class YsellAnalyzerApp:
 
     def _run_batch_export(self, analyze_after: bool):
         """Выполнение пакетного экспорта (в отдельном потоке)"""
-        from services.telegram import export_telegram_csv
+        from services.telegram import export_telegram_csv_legacy
         from ui.auth_dialog import TelegramCodeHandler
 
         total = len(self.chat_list)
@@ -431,7 +431,7 @@ class YsellAnalyzerApp:
                 asyncio.set_event_loop(loop)
 
                 result = loop.run_until_complete(
-                    export_telegram_csv(
+                    export_telegram_csv_legacy(
                         chat=chat_id,
                         start_date=item['start_date'],
                         end_date=item['end_date'],

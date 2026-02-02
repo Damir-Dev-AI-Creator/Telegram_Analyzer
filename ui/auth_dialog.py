@@ -307,7 +307,11 @@ class TelegramQRAuthDialog(ctk.CTkToplevel):
 
     def update_status(self, message, color="orange"):
         """Обновить статус"""
-        self.after(0, lambda: self.status_label.configure(text=message, text_color=color))
+        try:
+            if self.winfo_exists():
+                self.after(0, lambda: self.status_label.configure(text=message, text_color=color))
+        except:
+            pass
 
     def on_cancel(self):
         """Отмена авторизации"""
@@ -324,7 +328,11 @@ class TelegramQRAuthDialog(ctk.CTkToplevel):
 
     def close_dialog(self):
         """Закрыть диалог после успешной авторизации"""
-        self.after(0, self.destroy)
+        try:
+            if self.winfo_exists():
+                self.after(0, self.destroy)
+        except:
+            pass
 
 
 class TelegramAuthDialog(ctk.CTkToplevel):
@@ -509,7 +517,11 @@ class TelegramAuthDialog(ctk.CTkToplevel):
 
     def show_password_prompt(self):
         """Показать запрос пароля 2FA"""
-        self.after(0, self._show_password_prompt_ui)
+        try:
+            if self.winfo_exists():
+                self.after(0, self._show_password_prompt_ui)
+        except:
+            pass
 
     def _show_password_prompt_ui(self):
         """Обновление UI для запроса пароля"""
@@ -570,7 +582,11 @@ class TelegramAuthDialog(ctk.CTkToplevel):
 
     def show_error(self, message):
         """Показать ошибку"""
-        self.after(0, lambda: self._show_error_ui(message))
+        try:
+            if self.winfo_exists():
+                self.after(0, lambda: self._show_error_ui(message))
+        except:
+            pass
 
     def _show_error_ui(self, message):
         """Обновление UI для показа ошибки"""
@@ -587,7 +603,11 @@ class TelegramAuthDialog(ctk.CTkToplevel):
 
     def close_dialog(self):
         """Закрыть диалог после успешной авторизации"""
-        self.after(0, self.destroy)
+        try:
+            if self.winfo_exists():
+                self.after(0, self.destroy)
+        except:
+            pass
 
     def bind_paste_shortcuts(self, entry):
         """Привязка стандартных сочетаний клавиш к полю ввода"""
@@ -722,8 +742,12 @@ class TelegramCodeHandler:
                 raise Exception("QR-код истек. Время ожидания 5 минут истекло.")
 
             # Проверить отмену пользователем
-            if self.qr_dialog and self.qr_dialog.cancelled:
-                raise Exception("Авторизация отменена пользователем")
+            if self.qr_dialog:
+                try:
+                    if self.qr_dialog.winfo_exists() and self.qr_dialog.cancelled:
+                        raise Exception("Авторизация отменена пользователем")
+                except:
+                    pass
 
         except Exception as e:
             if self.qr_dialog:

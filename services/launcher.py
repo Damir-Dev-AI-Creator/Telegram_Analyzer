@@ -14,9 +14,18 @@ from core.config import (
 
 
 async def export_telegram(chat_id: str, start_date=None, end_date=None, limit=10000, code_handler=None):
-    """Экспорт данных из Telegram"""
-    from services.telegram import export_telegram_csv
-    await export_telegram_csv(chat_id, start_date, end_date, limit, code_handler)
+    """
+    DEPRECATED: Этот метод устарел и не поддерживается в multi-user версии бота.
+
+    Используйте Telegram бота для экспорта: python main.py --bot
+    Или GUI интерфейс: python main.py --gui
+
+    Старый консольный режим больше не совместим с новой multi-user архитектурой.
+    """
+    print("❌ Консольный режим экспорта устарел и больше не поддерживается.")
+    print("📱 Используйте Telegram бота: python main.py --bot")
+    print("🖥️ Или GUI интерфейс: python main.py --gui")
+    raise NotImplementedError("Console export is deprecated. Use bot mode: python main.py --bot")
 
 
 def analyze_csvs():

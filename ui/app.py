@@ -426,24 +426,33 @@ class YsellAnalyzerApp:
                                                                                                  f"[{idx + 1}/{total}] Экспорт: {c}"))
 
             try:
-                # Запуск экспорта
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-                result = loop.run_until_complete(
-                    export_telegram_csv(
-                        chat=chat_id,
-                        start_date=item['start_date'],
-                        end_date=item['end_date'],
-                        limit=item['limit'],
-                        code_handler=code_handler
-                    )
+                # DEPRECATED: GUI mode is not compatible with multi-user architecture
+                # The new export_telegram_csv() requires user_id parameter
+                # For now, showing error message
+                raise NotImplementedError(
+                    "GUI экспорт устарел и несовместим с multi-user архитектурой.\n"
+                    "Используйте Telegram бота: python main.py --bot\n"
+                    "Или используйте команды бота для экспорта."
                 )
-                loop.close()
 
-                if result:
-                    exported_files.append(result)
-                    self.root.after(0, lambda c=chat_id: self._set_status(f"✅ Экспортирован: {c}"))
+                # Old code (commented out - requires user_id now):
+                # loop = asyncio.new_event_loop()
+                # asyncio.set_event_loop(loop)
+                #
+                # result = loop.run_until_complete(
+                #     export_telegram_csv(
+                #         user_id=???,  # No user_id concept in GUI
+                #         chat=chat_id,
+                #         start_date=item['start_date'],
+                #         end_date=item['end_date'],
+                #         limit=item['limit']
+                #     )
+                # )
+                # loop.close()
+                #
+                # if result:
+                #     exported_files.append(result)
+                #     self.root.after(0, lambda c=chat_id: self._set_status(f"✅ Экспортирован: {c}"))
 
             except Exception as e:
                 errors.append(f"{chat_id}: {str(e)}")

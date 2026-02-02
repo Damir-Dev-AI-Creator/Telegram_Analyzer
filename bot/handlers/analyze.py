@@ -528,5 +528,21 @@ async def handle_document_upload(message: Message):
         # Игнорировать файлы не CSV формата
         return
 
+    # Проверить что пользователь настроен
+    from core.db_manager import get_db_manager
+    db = get_db_manager()
+    user = await db.get_user(message.from_user.id)
+
+    if not user or not user.is_configured:
+        await message.answer(
+            "⚠️ <b>Необходима настройка</b>\n\n"
+            "Для анализа файлов сначала настройте бота командой /setup\n\n"
+            "После настройки вы сможете:\n"
+            "• Загружать CSV файлы для автоматического анализа\n"
+            "• Использовать команду /analyze для анализа файлов\n"
+            "• Экспортировать чаты командой /export"
+        )
+        return
+
     # Запустить анализ загруженного CSV файла
     await _analyze_from_document(message)

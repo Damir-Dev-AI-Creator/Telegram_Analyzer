@@ -4,7 +4,7 @@
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, BufferedInputFile
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, BufferedInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 import re
 import asyncio
@@ -288,7 +288,7 @@ async def start_qr_auth(message: Message, state: FSMContext, api_id: int, api_ha
             photo=qr_file,
             caption=(
                 "📱 <b>QR-код для авторизации готов!</b>\n\n"
-                "<b>Как авторизоваться:</b>\n\n"
+                "<b>Способ 1 (если есть другое устройство):</b>\n"
                 "1️⃣ Откройте Telegram на телефоне\n"
                 "2️⃣ Перейдите: <b>Настройки → Устройства</b>\n"
                 "3️⃣ Нажмите <b>Привязать устройство</b>\n"
@@ -297,6 +297,22 @@ async def start_qr_auth(message: Message, state: FSMContext, api_id: int, api_ha
                 "QR-код действителен <b>5 минут</b>\n\n"
                 "Отправьте /cancel для отмены"
             )
+        )
+
+        # Отправить кнопку с кликабельной ссылкой для мобильных устройств
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text="📱 Войти через приложение Telegram",
+                url=qr_url
+            )]
+        ])
+
+        await message.answer(
+            "<b>Способ 2 (если вы на мобильном устройстве):</b>\n\n"
+            "Нажмите кнопку ниже — откроется ваше приложение Telegram.\n"
+            "Подтвердите вход, и готово! ✅\n\n"
+            "💡 <b>Этот способ удобен, когда у вас только один телефон.</b>",
+            reply_markup=keyboard
         )
 
         # Перейти в состояние ожидания сканирования

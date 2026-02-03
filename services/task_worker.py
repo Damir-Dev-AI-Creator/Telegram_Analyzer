@@ -88,7 +88,7 @@ class TaskWorker:
         chat_id = task.data.get('chat_id')
         start_date = task.data.get('start_date')
         end_date = task.data.get('end_date')
-        limit = task.data.get('limit', 10000)
+        limit = task.data.get('limit') or 10000  # Используем or вместо get с дефолтом
 
         try:
             # Уведомление о начале
@@ -274,7 +274,7 @@ class TaskWorker:
         chat_id = task.data.get('chat_id')
         start_date = task.data.get('start_date')
         end_date = task.data.get('end_date')
-        limit = task.data.get('limit', 10000)
+        limit = task.data.get('limit') or 10000  # Используем or вместо get с дефолтом
 
         try:
             # Получить пользователя и проверить Claude API ключ

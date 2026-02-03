@@ -424,7 +424,7 @@ async def wait_for_qr_auth(message: Message, state: FSMContext, client: Telegram
 
         try:
             await client.disconnect()
-        except:
+        except Exception:
             pass
 
         await state.clear()

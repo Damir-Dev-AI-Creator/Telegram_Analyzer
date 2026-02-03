@@ -310,7 +310,7 @@ class TelegramQRAuthDialog(ctk.CTkToplevel):
         try:
             if self.winfo_exists():
                 self.after(0, lambda: self.status_label.configure(text=message, text_color=color))
-        except:
+        except Exception:
             pass
 
     def on_cancel(self):
@@ -331,7 +331,7 @@ class TelegramQRAuthDialog(ctk.CTkToplevel):
         try:
             if self.winfo_exists():
                 self.after(0, self.destroy)
-        except:
+        except Exception:
             pass
 
 
@@ -520,7 +520,7 @@ class TelegramAuthDialog(ctk.CTkToplevel):
         try:
             if self.winfo_exists():
                 self.after(0, self._show_password_prompt_ui)
-        except:
+        except Exception:
             pass
 
     def _show_password_prompt_ui(self):
@@ -585,7 +585,7 @@ class TelegramAuthDialog(ctk.CTkToplevel):
         try:
             if self.winfo_exists():
                 self.after(0, lambda: self._show_error_ui(message))
-        except:
+        except Exception:
             pass
 
     def _show_error_ui(self, message):
@@ -606,7 +606,7 @@ class TelegramAuthDialog(ctk.CTkToplevel):
         try:
             if self.winfo_exists():
                 self.after(0, self.destroy)
-        except:
+        except Exception:
             pass
 
     def bind_paste_shortcuts(self, entry):
@@ -634,7 +634,7 @@ class TelegramAuthDialog(ctk.CTkToplevel):
             cursor_pos = entry.index("insert")
             entry.insert(cursor_pos, clipboard_text)
             return "break"
-        except:
+        except Exception:
             pass
         return "break"
 
@@ -645,7 +645,7 @@ class TelegramAuthDialog(ctk.CTkToplevel):
                 selected_text = entry.selection_get()
                 self.clipboard_clear()
                 self.clipboard_append(selected_text)
-        except:
+        except Exception:
             pass
         return "break"
 
@@ -657,7 +657,7 @@ class TelegramAuthDialog(ctk.CTkToplevel):
                 self.clipboard_clear()
                 self.clipboard_append(selected_text)
                 entry.delete("sel.first", "sel.last")
-        except:
+        except Exception:
             pass
         return "break"
 

@@ -5,6 +5,8 @@ import csv
 import asyncio
 import re
 import logging
+import tempfile
+import shutil
 from datetime import datetime, timezone
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -217,11 +219,17 @@ async def export_telegram_csv(
         os.makedirs(user_export_folder, exist_ok=True)
         output_filepath = os.path.join(user_export_folder, output_file)
 
+        # Использовать временный файл для предотвращения частичной записи
         fieldnames = ['Date', 'From', 'Text']
-        with open(output_filepath, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=';')
+        with tempfile.NamedTemporaryFile(mode='w', newline='', encoding='utf-8-sig',
+                                         dir=user_export_folder, delete=False) as tmp_f:
+            temp_filepath = tmp_f.name
+            writer = csv.DictWriter(tmp_f, fieldnames=fieldnames, delimiter=';')
             writer.writeheader()
             writer.writerows(messages_data)
+
+        # Переместить временный файл в финальное место только после успешной записи
+        shutil.move(temp_filepath, output_filepath)
 
         logger.info(f"✅ Export completed: {output_filepath}")
         logger.info(f"📊 Exported messages: {len(messages_data)}")
@@ -425,11 +433,17 @@ async def export_telegram_csv_legacy(
         input_folder.mkdir(parents=True, exist_ok=True)
         output_filepath = os.path.join(str(input_folder), output_file)
 
+        # Использовать временный файл для предотвращения частичной записи
         fieldnames = ['Date', 'From', 'Text']
-        with open(output_filepath, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=';')
+        with tempfile.NamedTemporaryFile(mode='w', newline='', encoding='utf-8-sig',
+                                         dir=str(input_folder), delete=False) as tmp_f:
+            temp_filepath = tmp_f.name
+            writer = csv.DictWriter(tmp_f, fieldnames=fieldnames, delimiter=';')
             writer.writeheader()
             writer.writerows(messages_data)
+
+        # Переместить временный файл в финальное место только после успешной записи
+        shutil.move(temp_filepath, output_filepath)
 
         logger.info(f"[LEGACY] ✅ Export completed: {output_filepath}")
         logger.info(f"[LEGACY] 📊 Exported messages: {len(messages_data)}")

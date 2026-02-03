@@ -28,6 +28,8 @@ def _get_or_create_encryption_key() -> bytes:
         os.makedirs(os.path.dirname(ENCRYPTION_KEY_FILE), exist_ok=True)
         with open(ENCRYPTION_KEY_FILE, "wb") as f:
             f.write(key)
+        # Установка безопасных прав доступа (только владелец может читать/писать)
+        os.chmod(ENCRYPTION_KEY_FILE, 0o600)
         return key
 
 
@@ -167,8 +169,8 @@ class DatabaseManager:
             user_id: Telegram User ID
             session_string: StringSession от Telethon
         """
-        encrypted = encrypt_session(session_string)
-        await self.update_user(user_id, session_string=encrypted, is_authorized=True)
+        # update_user сам зашифрует session_string, не нужно делать это здесь
+        await self.update_user(user_id, session_string=session_string, is_authorized=True)
         logger.info(f"✅ Сохранена сессия для пользователя: {user_id}")
 
     async def is_user_configured(self, user_id: int) -> bool:

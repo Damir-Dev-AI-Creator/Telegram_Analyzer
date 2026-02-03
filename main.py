@@ -261,8 +261,8 @@ def main():
         if arg in ['--init', '-i']:
             # Для инициализации не требуются все зависимости
             run_init_only()
-        
-        if arg in ['--bot', '-b']:
+
+        elif arg in ['--bot', '-b']:
             print("🤖 Запуск Telegram бота...")
             if not check_dependencies_quick(mode='bot'):
                 sys.exit(1)
@@ -276,7 +276,7 @@ def main():
                 traceback.print_exc()
                 sys.exit(1)
 
-        if arg in ['--console', '-c']:
+        elif arg in ['--console', '-c']:
             print("📟 Запуск в консольном режиме...")
             if not check_dependencies_quick(mode='gui'):  # Console может использовать GUI для setup
                 sys.exit(1)
@@ -288,7 +288,7 @@ def main():
                 print(f"❌ Ошибка: {e}")
                 sys.exit(1)
 
-        if arg not in ['--bot', '-b', '--console', '-c', '--init', '-i', '--paths', '-p', '--version', '-v', '--help', '-h']:
+        else:
             print(f"❌ Неизвестный аргумент: {arg}")
             print("Используйте --help для справки")
             sys.exit(1)

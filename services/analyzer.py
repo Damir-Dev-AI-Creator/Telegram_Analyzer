@@ -29,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Константы Claude API
-CLAUDE_MODEL = "claude-sonnet-4-20250514"  # Актуальная модель
+CLAUDE_MODEL = "claude-sonnet-4-5-20250929"  # Актуальная модель Claude Sonnet 4.5
 MAX_TOKENS = 8192  # Максимум токенов в ответе
 MAX_RETRIES = 3  # Количество попыток при ошибке API
 MAX_CSV_ROWS = 3000  # Лимит строк CSV для контекста
@@ -98,8 +98,8 @@ def analyze_csv_with_claude(file_path: str, claude_api_key: Optional[str] = None
             )
             df = df.head(MAX_CSV_ROWS)
 
-        # Формирование контента
-        csv_content = df.to_string(index=False)
+        # Формирование контента (используем to_csv для эффективности)
+        csv_content = df.to_csv(index=False, sep=';')
 
         # Промпт для анализа (используем кастомный если есть, иначе дефолтный)
         if custom_prompt:

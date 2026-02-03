@@ -212,20 +212,20 @@ class ClipboardManager:
                 entry = widget._entry
                 try:
                     entry.delete("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
                 entry.insert("insert", clipboard_text)
             elif hasattr(widget, '_textbox'):
                 textbox = widget._textbox
                 try:
                     textbox.delete("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
                 textbox.insert("insert", clipboard_text)
             else:
                 try:
                     widget.delete("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
                 widget.insert("insert", clipboard_text)
 
@@ -247,7 +247,7 @@ class ClipboardManager:
                 textbox = widget._textbox
                 try:
                     selected_text = textbox.get("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
             else:
                 if hasattr(widget, 'selection_present') and widget.selection_present():
@@ -277,7 +277,7 @@ class ClipboardManager:
                 try:
                     selected_text = textbox.get("sel.first", "sel.last")
                     textbox.delete("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
             else:
                 if hasattr(widget, 'selection_present') and widget.selection_present():

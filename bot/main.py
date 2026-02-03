@@ -17,7 +17,7 @@ from core.first_run_setup import check_bot_token_configured, run_first_time_setu
 from bot.handlers import start, export, analyze, setup, prompt, debug
 
 # Импорт инициализации БД
-from core.database import init_database
+from core.database import init_database, close_database
 
 # Настройка логирования
 logging.basicConfig(
@@ -140,6 +140,7 @@ async def main():
         logger.info("Закрытие соединений...")
         await worker.stop()
         await bot.session.close()
+        await close_database()
         logger.info("✅ Бот остановлен")
 
 

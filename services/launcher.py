@@ -15,8 +15,8 @@ from core.config import (
 
 async def export_telegram(chat_id: str, start_date=None, end_date=None, limit=10000, code_handler=None):
     """Экспорт данных из Telegram"""
-    from services.telegram import export_telegram_csv
-    await export_telegram_csv(chat_id, start_date, end_date, limit, code_handler)
+    from services.telegram import export_telegram_csv_legacy
+    await export_telegram_csv_legacy(chat_id, start_date, end_date, limit, code_handler)
 
 
 def analyze_csvs():

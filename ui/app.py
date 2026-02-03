@@ -407,7 +407,7 @@ class YsellAnalyzerApp:
 
     def _run_batch_export(self, analyze_after: bool):
         """Выполнение пакетного экспорта (в отдельном потоке)"""
-        from services.telegram import export_telegram_csv
+        from services.telegram import export_telegram_csv_legacy
         from ui.auth_dialog import TelegramCodeHandler
 
         total = len(self.chat_list)
@@ -425,13 +425,14 @@ class YsellAnalyzerApp:
             self.root.after(0, lambda p=progress, c=chat_id, idx=i: self._update_export_progress(p,
                                                                                                  f"[{idx + 1}/{total}] Экспорт: {c}"))
 
+            loop = None
             try:
                 # Запуск экспорта
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
                 result = loop.run_until_complete(
-                    export_telegram_csv(
+                    export_telegram_csv_legacy(
                         chat=chat_id,
                         start_date=item['start_date'],
                         end_date=item['end_date'],
@@ -439,7 +440,6 @@ class YsellAnalyzerApp:
                         code_handler=code_handler
                     )
                 )
-                loop.close()
 
                 if result:
                     exported_files.append(result)
@@ -448,6 +448,10 @@ class YsellAnalyzerApp:
             except Exception as e:
                 errors.append(f"{chat_id}: {str(e)}")
                 self.root.after(0, lambda c=chat_id, err=str(e): self._set_status(f"❌ Ошибка {c}: {err}"))
+            finally:
+                # Гарантируем закрытие event loop
+                if loop is not None:
+                    loop.close()
 
         # Экспорт завершён
         self.root.after(0, lambda: self._update_export_progress(1.0, "Экспорт завершён"))
@@ -664,7 +668,7 @@ class YsellAnalyzerApp:
 
         if csv_files:
             for f in csv_files:
-                self.csv_listbox.insert(END, f"• {f}\n")
+                self.csv_listbox.insert(END, f"• {f.name}\n")
         else:
             self.csv_listbox.insert("1.0", "Нет CSV файлов для анализа")
 

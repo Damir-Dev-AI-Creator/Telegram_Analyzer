@@ -212,20 +212,20 @@ class ClipboardManager:
                 entry = widget._entry
                 try:
                     entry.delete("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
                 entry.insert("insert", clipboard_text)
             elif hasattr(widget, '_textbox'):
                 textbox = widget._textbox
                 try:
                     textbox.delete("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
                 textbox.insert("insert", clipboard_text)
             else:
                 try:
                     widget.delete("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
                 widget.insert("insert", clipboard_text)
 
@@ -247,7 +247,7 @@ class ClipboardManager:
                 textbox = widget._textbox
                 try:
                     selected_text = textbox.get("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
             else:
                 if hasattr(widget, 'selection_present') and widget.selection_present():
@@ -277,7 +277,7 @@ class ClipboardManager:
                 try:
                     selected_text = textbox.get("sel.first", "sel.last")
                     textbox.delete("sel.first", "sel.last")
-                except:
+                except Exception:
                     pass
             else:
                 if hasattr(widget, 'selection_present') and widget.selection_present():
@@ -691,15 +691,16 @@ def setup_logging(log_dir: Path, name: str = "ysell_analyzer") -> logging.Logger
 
 def check_dependencies() -> tuple[bool, List[str]]:
     """
-    Проверка установленных зависимостей.
+    Проверка установленных зависимостей (только обязательные, без GUI).
 
     Returns:
         (все_установлены, список_отсутствующих)
     """
+    # Только обязательные зависимости (без GUI для серверного режима)
     required = {
         'telethon': 'telethon>=1.34.0',
         'pandas': 'pandas>=2.0.0',
-        'customtkinter': 'customtkinter>=5.2.0',
+        # customtkinter не включен - это GUI библиотека, не обязательна для bot режима
         'anthropic': 'anthropic>=0.40.0',
         'docx': 'python-docx>=1.1.0',
         'PIL': 'Pillow>=10.0.0',

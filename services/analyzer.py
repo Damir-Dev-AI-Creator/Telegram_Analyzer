@@ -29,45 +29,56 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Константы Claude API
-CLAUDE_MODEL = "claude-sonnet-4-20250514"  # Актуальная модель
+CLAUDE_MODEL = "claude-sonnet-4-5-20250929"  # Актуальная модель Claude Sonnet 4.5
 MAX_TOKENS = 8192  # Максимум токенов в ответе
 MAX_RETRIES = 3  # Количество попыток при ошибке API
 MAX_CSV_ROWS = 3000  # Лимит строк CSV для контекста
 API_DELAY_SECONDS = 5  # Задержка между запросами к API (секунды)
 
-# Глобальный клиент (инициализируется лениво)
-_client: Optional[anthropic.Anthropic] = None
+def get_client(api_key: Optional[str] = None) -> anthropic.Anthropic:
+    """
+    Получение или создание клиента Claude API
+
+    Args:
+        api_key: Claude API ключ (если None, использует глобальный из конфига)
+
+    Returns:
+        Клиент Claude API
+    """
+    # Если передан api_key, создаем новый клиент для этого ключа
+    if api_key and api_key.strip():
+        return anthropic.Anthropic(api_key=api_key)
+
+    # Иначе используем глобальный ключ из конфига
+    if not CLAUDE_API_KEY or CLAUDE_API_KEY.strip() == "":
+        raise ValueError(
+            "CLAUDE_API_KEY не настроен. Откройте настройки и введите ключ API."
+        )
+
+    logger.info("✅ Using global Claude API key from config")
+    return anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
 
-def get_client() -> anthropic.Anthropic:
-    """Получение или создание клиента Claude API"""
-    global _client
-
-    if _client is None:
-        if not CLAUDE_API_KEY or CLAUDE_API_KEY.strip() == "":
-            raise ValueError(
-                "CLAUDE_API_KEY не настроен. Откройте настройки и введите ключ API."
-            )
-
-        _client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
-        logger.info("✅ Клиент Claude API инициализирован")
-
-    return _client
-
-
-def analyze_csv_with_claude(file_path: str) -> str:
+def analyze_csv_with_claude(file_path: str, claude_api_key: Optional[str] = None, custom_prompt: Optional[str] = None) -> str:
     """
     Читает CSV и отправляет данные в Claude API для анализа.
 
     Args:
         file_path: Путь к CSV файлу
+        claude_api_key: Claude API ключ (опционально, если None - использует глобальный)
+        custom_prompt: Кастомный промпт пользователя (опционально, если None - использует дефолтный)
 
     Returns:
         Текст анализа от Claude
+
+    Raises:
+        ValueError: Если Claude API ключ не настроен
+        Exception: Другие ошибки при анализе
     """
     try:
-        client = get_client()
-        logger.info(f"📖 Чтение файла: {file_path}")
+        # Создать клиент с переданным или глобальным ключом
+        client = get_client(api_key=claude_api_key)
+        logger.info(f"📖 Reading file: {file_path}")
 
         # Чтение CSV с поддержкой разных форматов
         df = _read_csv_flexible(file_path)
@@ -87,11 +98,17 @@ def analyze_csv_with_claude(file_path: str) -> str:
             )
             df = df.head(MAX_CSV_ROWS)
 
-        # Формирование контента
-        csv_content = df.to_string(index=False)
+        # Формирование контента (используем to_csv для эффективности)
+        csv_content = df.to_csv(index=False, sep=';')
 
-        # Промпт для анализа
-        prompt = _build_analysis_prompt(csv_content)
+        # Промпт для анализа (используем кастомный если есть, иначе дефолтный)
+        if custom_prompt:
+            logger.info("🎯 Используется кастомный промпт пользователя")
+            # В кастомном промпте {csv_content} будет заменен на данные
+            prompt = custom_prompt.replace("{csv_content}", csv_content)
+        else:
+            logger.info("📝 Используется дефолтный промпт анализа")
+            prompt = _build_analysis_prompt(csv_content)
 
         logger.info("🤖 Отправка запроса в Claude API...")
 

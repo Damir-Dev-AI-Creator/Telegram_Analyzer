@@ -40,23 +40,35 @@ def setup_paths():
         sys.path.insert(0, script_dir)
 
 
-def check_dependencies_quick():
-    """Быстрая проверка критических зависимостей"""
+def check_dependencies_quick(mode='gui'):
+    """Быстрая проверка критических зависимостей
+
+    Args:
+        mode: 'gui' для GUI режима (с customtkinter), 'bot' для бота (без GUI)
+    """
+    # Базовые зависимости для всех режимов
     critical_packages = {
-        'customtkinter': 'customtkinter',
         'telethon': 'telethon',
         'pandas': 'pandas',
         'anthropic': 'anthropic',
         'docx': 'python-docx',
     }
-    
+
+    # Добавить GUI зависимости только для GUI режима
+    if mode == 'gui':
+        critical_packages['customtkinter'] = 'customtkinter'
+
+    # Добавить bot зависимости только для bot режима
+    if mode == 'bot':
+        critical_packages['aiogram'] = 'aiogram'
+
     missing = []
     for module, package in critical_packages.items():
         try:
             __import__(module)
         except ImportError:
             missing.append(package)
-    
+
     if missing:
         print("❌ Отсутствуют критические зависимости:")
         print(f"   {', '.join(missing)}")
@@ -64,10 +76,14 @@ def check_dependencies_quick():
         print("Установите зависимости командой:")
         print(f"   pip install {' '.join(missing)}")
         print()
-        print("Или установите все сразу:")
-        print("   pip install -r requirements.txt")
+        if mode == 'bot':
+            print("Или установите серверные зависимости:")
+            print("   pip install -r requirements-server.txt")
+        else:
+            print("Или установите все сразу:")
+            print("   pip install -r requirements.txt")
         return False
-    
+
     return True
 
 
@@ -170,6 +186,23 @@ def run_init_only():
     sys.exit(0 if success else 1)
 
 
+def run_bot():
+    """Запуск Telegram бота"""
+    from core.bootstrap import AppBootstrap
+
+    # Инициализация
+    bootstrap = AppBootstrap(auto_install_deps=False)
+    success, message = bootstrap.initialize()
+
+    if not success:
+        print(message)
+        sys.exit(1)
+
+    # Запуск бота
+    from bot.main import run
+    run()
+
+
 def print_help():
     """Вывод справки"""
     print("""
@@ -177,6 +210,7 @@ def print_help():
 
 Опции:
   (без опций)    Запуск GUI (по умолчанию)
+  --bot, -b      Запуск Telegram бота
   --console, -c  Консольный режим
   --init, -i     Только инициализация (создание папок)
   --paths, -p    Показать пути к папкам
@@ -185,6 +219,7 @@ def print_help():
 
 Примеры:
   python main.py              # Запуск GUI
+  python main.py --bot        # Запуск Telegram бота
   python main.py --console    # Консольный режим
   python main.py --init       # Инициализация
 
@@ -219,19 +254,31 @@ def main():
             sys.exit(0)
         
         if arg in ['--paths', '-p']:
-            if not check_dependencies_quick():
-                sys.exit(1)
+            # Для показа путей не требуются все зависимости
             show_paths()
             sys.exit(0)
-        
+
         if arg in ['--init', '-i']:
-            if not check_dependencies_quick():
-                sys.exit(1)
+            # Для инициализации не требуются все зависимости
             run_init_only()
-        
-        if arg in ['--console', '-c']:
+
+        elif arg in ['--bot', '-b']:
+            print("🤖 Запуск Telegram бота...")
+            if not check_dependencies_quick(mode='bot'):
+                sys.exit(1)
+            try:
+                run_bot()
+            except KeyboardInterrupt:
+                print("\n\n👋 Бот остановлен")
+            except Exception as e:
+                print(f"❌ Ошибка: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+
+        elif arg in ['--console', '-c']:
             print("📟 Запуск в консольном режиме...")
-            if not check_dependencies_quick():
+            if not check_dependencies_quick(mode='gui'):  # Console может использовать GUI для setup
                 sys.exit(1)
             try:
                 run_console()
@@ -240,6 +287,7 @@ def main():
             except Exception as e:
                 print(f"❌ Ошибка: {e}")
                 sys.exit(1)
+
         else:
             print(f"❌ Неизвестный аргумент: {arg}")
             print("Используйте --help для справки")

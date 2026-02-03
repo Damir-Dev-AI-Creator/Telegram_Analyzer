@@ -7,6 +7,7 @@ import os
 from typing import Optional
 from aiogram import Bot
 from aiogram.types import FSInputFile
+from aiogram.exceptions import TelegramForbiddenError
 
 from core.queue import task_queue, Task, TaskType, TaskStatus
 from core.config import BOT_TOKEN
@@ -31,6 +32,34 @@ class TaskWorker:
         """Инициализация worker"""
         self.bot: Optional[Bot] = None
         self.running = False
+
+    async def _safe_send_message(self, user_id: int, text: str, **kwargs) -> bool:
+        """
+        Безопасная отправка сообщения (игнорирует ботов)
+
+        Returns:
+            bool: True если отправлено, False если пользователь - бот
+        """
+        try:
+            await self.bot.send_message(user_id, text, **kwargs)
+            return True
+        except TelegramForbiddenError:
+            logger.warning(f"Cannot send message to user {user_id} (bot account)")
+            return False
+
+    async def _safe_send_document(self, user_id: int, document, **kwargs) -> bool:
+        """
+        Безопасная отправка документа (игнорирует ботов)
+
+        Returns:
+            bool: True если отправлено, False если пользователь - бот
+        """
+        try:
+            await self.bot.send_document(user_id, document, **kwargs)
+            return True
+        except TelegramForbiddenError:
+            logger.warning(f"Cannot send document to user {user_id} (bot account)")
+            return False
 
     async def start(self):
         """Запустить worker"""
@@ -92,7 +121,7 @@ class TaskWorker:
 
         try:
             # Уведомление о начале
-            await self.bot.send_message(
+            await self._safe_send_message(
                 user_id,
                 f"⏳ <b>Экспорт начался</b>\n\n"
                 f"🆔 Задача: #{task.task_id}\n"
@@ -116,7 +145,7 @@ class TaskWorker:
 
             filename = os.path.basename(file_path)
             document = FSInputFile(file_path)
-            await self.bot.send_document(
+            await self._safe_send_document(
                 user_id,
                 document=document,
                 caption=(
@@ -139,7 +168,7 @@ class TaskWorker:
             # Специальная обработка для частых ошибок
             if "не являетесь участником" in error_message.lower() or "not part of" in error_message.lower():
                 # Пользователь не в чате - уже понятное сообщение из telegram.py
-                await self.bot.send_message(
+                await self._safe_send_message(
                     user_id,
                     f"❌ <b>Ошибка экспорта</b>\n\n"
                     f"🆔 Задача: #{task.task_id}\n\n"
@@ -151,7 +180,7 @@ class TaskWorker:
                 )
             else:
                 # Другие ошибки
-                await self.bot.send_message(
+                await self._safe_send_message(
                     user_id,
                     f"❌ <b>Ошибка экспорта</b>\n\n"
                     f"🆔 Задача: #{task.task_id}\n"
@@ -188,7 +217,7 @@ class TaskWorker:
                 )
 
             # Уведомление о начале
-            await self.bot.send_message(
+            await self._safe_send_message(
                 user_id,
                 f"🤖 <b>Анализ начался</b>\n\n"
                 f"🆔 Задача: #{task.task_id}\n"
@@ -235,7 +264,7 @@ class TaskWorker:
                 raise FileNotFoundError(f"Файл анализа не найден: {output_path}")
 
             document = FSInputFile(output_path)
-            await self.bot.send_document(
+            await self._safe_send_document(
                 user_id,
                 document=document,
                 caption=(
@@ -253,7 +282,7 @@ class TaskWorker:
         except Exception as e:
             logger.error(f"❌ Ошибка при анализе задачи #{task.task_id}: {e}", exc_info=True)
 
-            await self.bot.send_message(
+            await self._safe_send_message(
                 user_id,
                 f"❌ <b>Ошибка анализа</b>\n\n"
                 f"🆔 Задача: #{task.task_id}\n"
@@ -291,7 +320,7 @@ class TaskWorker:
                 )
 
             # Шаг 1: Экспорт
-            await self.bot.send_message(
+            await self._safe_send_message(
                 user_id,
                 f"📊 <b>Экспорт + Анализ</b>\n\n"
                 f"🆔 Задача: #{task.task_id}\n"
@@ -313,14 +342,14 @@ class TaskWorker:
 
             # Отправить CSV
             document = FSInputFile(file_path)
-            await self.bot.send_document(
+            await self._safe_send_document(
                 user_id,
                 document=document,
                 caption=f"✅ Экспорт завершен: <code>{filename}</code>"
             )
 
             # Шаг 2: Анализ
-            await self.bot.send_message(
+            await self._safe_send_message(
                 user_id,
                 f"🤖 <b>Шаг 2/2: Анализ через Claude API...</b>\n\n"
                 f"⏳ Это может занять некоторое время."
@@ -358,7 +387,7 @@ class TaskWorker:
             # Отправить DOCX
             if os.path.exists(output_path):
                 document = FSInputFile(output_path)
-                await self.bot.send_document(
+                await self._safe_send_document(
                     user_id,
                     document=document,
                     caption=(
@@ -382,7 +411,7 @@ class TaskWorker:
             # Специальная обработка для частых ошибок
             if "не являетесь участником" in error_message.lower() or "not part of" in error_message.lower():
                 # Пользователь не в чате
-                await self.bot.send_message(
+                await self._safe_send_message(
                     user_id,
                     f"❌ <b>Ошибка экспорта</b>\n\n"
                     f"🆔 Задача: #{task.task_id}\n\n"
@@ -394,7 +423,7 @@ class TaskWorker:
                 )
             else:
                 # Другие ошибки
-                await self.bot.send_message(
+                await self._safe_send_message(
                     user_id,
                     f"❌ <b>Ошибка</b>\n\n"
                     f"🆔 Задача: #{task.task_id}\n"

@@ -1,0 +1,41 @@
+services:
+  # Telegram Bot - Background Worker
+  - type: worker
+    name: telegram-analyzer-bot
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    region: oregon  # или frankfurt для Европы
+    plan: free  # free, starter, standard
+
+    # Переменные окружения
+    envVars:
+      - key: BOT_TOKEN
+        sync: false  # Установить вручную в Render Dashboard
+
+      - key: CLAUDE_API_KEY
+        sync: false  # Опционально, можно оставить пустым
+
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+
+    # Health check - проверка что бот работает
+    # Render будет перезапускать если процесс упадет
+    autoDeploy: true
+
+    # Диск для хранения данных (опционально)
+    # disk:
+    #   name: bot-data
+    #   mountPath: /app/data
+    #   sizeGB: 1
+
+# База данных (опционально, если нужна PostgreSQL вместо SQLite)
+# databases:
+#   - name: telegram-analyzer-db
+#     databaseName: analyzer
+#     user: analyzer_user
+#     region: oregon
+#     plan: free

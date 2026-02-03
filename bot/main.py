@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.exceptions import TelegramConflictError
 
 # Импорт конфигурации
 from core.config import BOT_TOKEN, reload_config
@@ -136,6 +137,19 @@ async def main():
         )
     except KeyboardInterrupt:
         logger.info("Получен сигнал остановки")
+    except TelegramConflictError:
+        logger.error("=" * 60)
+        logger.error("❌ КОНФЛИКТ: Другой экземпляр бота уже запущен!")
+        logger.error("=" * 60)
+        logger.error("Возможные причины:")
+        logger.error("1. Бот запущен на Railway и Render одновременно")
+        logger.error("2. Несколько инстансов в одном сервисе")
+        logger.error("3. Бот запущен локально и в облаке")
+        logger.error("")
+        logger.error("Решение:")
+        logger.error("- Остановите один из экземпляров")
+        logger.error("- Используйте только один деплой (Railway ИЛИ Render)")
+        logger.error("=" * 60)
     finally:
         logger.info("Закрытие соединений...")
         await worker.stop()

@@ -16,6 +16,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from core.config import (
     CLAUDE_API_KEY,
+    CLAUDE_MODEL,
     get_input_folder,
     get_output_folder,
     get_logs_dir
@@ -29,11 +30,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Константы Claude API
-CLAUDE_MODEL = "claude-sonnet-4-20250514"  # Актуальная модель
+# CLAUDE_MODEL импортируется из config (можно настроить в .env)
 MAX_TOKENS = 8192  # Максимум токенов в ответе
 MAX_RETRIES = 3  # Количество попыток при ошибке API
 MAX_CSV_ROWS = 3000  # Лимит строк CSV для контекста
 API_DELAY_SECONDS = 5  # Задержка между запросами к API (секунды)
+API_TIMEOUT_SECONDS = 300  # Таймаут для API запросов (5 минут)
 
 # Глобальный клиент (инициализируется лениво)
 _client: Optional[anthropic.Anthropic] = None
@@ -101,6 +103,7 @@ def analyze_csv_with_claude(file_path: str) -> str:
                 message = client.messages.create(
                     model=CLAUDE_MODEL,
                     max_tokens=MAX_TOKENS,
+                    timeout=API_TIMEOUT_SECONDS,
                     messages=[
                         {"role": "user", "content": prompt}
                     ]
@@ -263,7 +266,8 @@ def save_to_docx(text_content: str, output_file_path: str, source_filename: str)
 def analyze_csv_folder(
         input_folder: Optional[str] = None,
         output_folder: Optional[str] = None,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[callable] = None,
+        delete_after: bool = True
 ) -> dict:
     """
     Анализирует все CSV файлы в папке и создаёт DOCX отчёты.
@@ -273,6 +277,7 @@ def analyze_csv_folder(
         output_folder: Путь к папке для DOCX (по умолчанию из конфига)
         progress_callback: Функция обратного вызова для обновления прогресса
                           Сигнатура: callback(current: int, total: int, filename: str, status: str)
+        delete_after: Удалять ли CSV файлы после успешного анализа (по умолчанию True)
 
     Returns:
         Словарь с результатами: {'success': int, 'errors': int, 'details': list}
@@ -355,12 +360,13 @@ def analyze_csv_folder(
             # Сохранение результата
             save_to_docx(analysis_result, str(output_file_path), filename)
 
-            # Удаление исходного файла после успешного сохранения
-            try:
-                csv_file.unlink()
-                logger.info(f"🗑️ Исходный файл {filename} удалён")
-            except Exception as e:
-                logger.warning(f"⚠️ Не удалось удалить {filename}: {e}")
+            # Удаление исходного файла после успешного сохранения (если delete_after=True)
+            if delete_after:
+                try:
+                    csv_file.unlink()
+                    logger.info(f"🗑️ Исходный файл {filename} удалён")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось удалить {filename}: {e}")
 
             success_count += 1
             logger.info(f"✅ Файл {filename} успешно обработан!")

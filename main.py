@@ -17,7 +17,7 @@ import sys
 import os
 
 # Минимальная версия Python
-MIN_PYTHON = (3, 9)
+MIN_PYTHON = (3, 12)
 
 
 def check_python_version():
@@ -28,8 +28,8 @@ def check_python_version():
         print()
         print("Установите актуальную версию Python:")
         print("  - Windows: https://www.python.org/downloads/")
-        print("  - macOS: brew install python")
-        print("  - Linux: sudo apt install python3.11")
+        print("  - macOS: brew install python@3.12")
+        print("  - Linux: sudo apt install python3.12")
         sys.exit(1)
 
 
@@ -209,27 +209,29 @@ def main():
     # 4. Обработка аргументов
     if len(sys.argv) > 1:
         arg = sys.argv[1].lower()
-        
+
         if arg in ['--help', '-h']:
             print_help()
             sys.exit(0)
-        
-        if arg in ['--version', '-v']:
+
+        elif arg in ['--version', '-v']:
             print("Ysell Analyzer v0.2.0")
             sys.exit(0)
-        
-        if arg in ['--paths', '-p']:
+
+        elif arg in ['--paths', '-p']:
             if not check_dependencies_quick():
                 sys.exit(1)
             show_paths()
             sys.exit(0)
-        
-        if arg in ['--init', '-i']:
+
+        elif arg in ['--init', '-i']:
             if not check_dependencies_quick():
                 sys.exit(1)
             run_init_only()
-        
-        if arg in ['--console', '-c']:
+            # run_init_only() calls sys.exit() internally, but for clarity:
+            sys.exit(0)
+
+        elif arg in ['--console', '-c']:
             print("📟 Запуск в консольном режиме...")
             if not check_dependencies_quick():
                 sys.exit(1)
@@ -237,9 +239,11 @@ def main():
                 run_console()
             except KeyboardInterrupt:
                 print("\n\n👋 Программа завершена")
+                sys.exit(0)
             except Exception as e:
                 print(f"❌ Ошибка: {e}")
                 sys.exit(1)
+
         else:
             print(f"❌ Неизвестный аргумент: {arg}")
             print("Используйте --help для справки")

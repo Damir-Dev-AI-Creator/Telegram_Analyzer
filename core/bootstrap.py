@@ -42,7 +42,7 @@ class AppBootstrap:
     - Настраивает логирование
     """
 
-    MIN_PYTHON_VERSION = (3, 9)
+    MIN_PYTHON_VERSION = (3, 12)
 
     def __init__(self, auto_install_deps: bool = False):
         """
@@ -120,9 +120,10 @@ class AppBootstrap:
         print(f"📦 Установка зависимостей: {', '.join(missing)}")
         try:
             for package in missing:
+                # Пытаемся установить в пользовательское окружение
                 subprocess.check_call([
                     sys.executable, "-m", "pip", "install", package,
-                    "--quiet", "--break-system-packages"
+                    "--user", "--quiet"
                 ])
 
             # Повторная проверка

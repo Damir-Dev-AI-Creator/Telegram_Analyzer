@@ -1,4 +1,4 @@
-# Dockerfile для Railway и других PaaS платформ
+# Dockerfile для Railway, Render и других PaaS платформ
 FROM python:3.11-slim
 
 # Установить системные зависимости

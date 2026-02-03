@@ -1,0 +1,28 @@
+{
+  "services": [
+    {
+      "type": "background_worker",
+      "name": "telegram-analyzer-bot",
+      "env": "docker",
+      "dockerfilePath": "Dockerfile",
+      "region": "oregon",
+      "plan": "free",
+      "envVars": [
+        {
+          "key": "BOT_TOKEN",
+          "description": "Telegram Bot Token from @BotFather",
+          "required": true
+        },
+        {
+          "key": "PYTHONUNBUFFERED",
+          "value": "1"
+        },
+        {
+          "key": "PYTHONDONTWRITEBYTECODE",
+          "value": "1"
+        }
+      ],
+      "autoDeploy": true
+    }
+  ]
+}

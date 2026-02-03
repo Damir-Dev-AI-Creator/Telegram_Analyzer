@@ -7,7 +7,7 @@ import platform
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Tuple
 
 
 # ============================================================================
@@ -689,7 +689,7 @@ def setup_logging(log_dir: Path, name: str = "ysell_analyzer") -> logging.Logger
 # Проверка зависимостей
 # ============================================================================
 
-def check_dependencies() -> tuple[bool, List[str]]:
+def check_dependencies() -> Tuple[bool, List[str]]:
     """
     Проверка установленных зависимостей.
 
@@ -716,7 +716,7 @@ def check_dependencies() -> tuple[bool, List[str]]:
     return len(missing) == 0, missing
 
 
-def check_python_version(min_version: tuple = (3, 9)) -> bool:
+def check_python_version(min_version: tuple = (3, 12)) -> bool:
     """Проверка минимальной версии Python"""
     return sys.version_info >= min_version
 
@@ -775,7 +775,7 @@ def validate_phone(phone: str) -> tuple[bool, str]:
     return True, ""
 
 
-def validate_api_hash(api_hash: str) -> tuple[bool, str]:
+def validate_api_hash(api_hash: str) -> Tuple[bool, str]:
     """Валидация API Hash"""
     api_hash = api_hash.strip()
 
@@ -786,6 +786,40 @@ def validate_api_hash(api_hash: str) -> tuple[bool, str]:
         return False, "API Hash должен содержать 32 символа"
 
     return True, ""
+
+
+def validate_chat_id(chat_id: str) -> Tuple[bool, str]:
+    """
+    Валидация Chat ID или username.
+
+    Args:
+        chat_id: ID чата или username
+
+    Returns:
+        (валиден, сообщение_об_ошибке)
+    """
+    chat_id = chat_id.strip()
+
+    if not chat_id:
+        return False, "Chat ID не может быть пустым"
+
+    # Проверка для username (@username)
+    if chat_id.startswith('@'):
+        if len(chat_id) < 6:
+            return False, "Username слишком короткий (минимум 5 символов после @)"
+        if not chat_id[1:].replace('_', '').isalnum():
+            return False, "Username может содержать только буквы, цифры и подчеркивания"
+        return True, ""
+
+    # Проверка для числового ID
+    if chat_id.lstrip('-').isdigit():
+        return True, ""
+
+    # Проверка для t.me ссылки
+    if 't.me/' in chat_id or 'telegram.me/' in chat_id:
+        return True, ""
+
+    return False, "Неверный формат. Используйте @username, числовой ID или ссылку t.me"
 
 
 # ============================================================================

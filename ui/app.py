@@ -24,6 +24,7 @@ from core.utils import (
     ClipboardManager,
     setup_platform_specifics,
     validate_date,
+    validate_chat_id,
     get_csv_files,
     is_macos
 )
@@ -275,6 +276,12 @@ class YsellAnalyzerApp:
 
         if not chat_id:
             messagebox.showwarning("Ошибка", "Введите ссылку!")
+            return
+
+        # Валидация chat_id
+        valid, msg = validate_chat_id(chat_id)
+        if not valid:
+            messagebox.showerror("Ошибка валидации", f"Некорректный Chat ID:\n{msg}")
             return
 
         # Валидация дат
@@ -664,7 +671,7 @@ class YsellAnalyzerApp:
 
         if csv_files:
             for f in csv_files:
-                self.csv_listbox.insert(END, f"• {f}\n")
+                self.csv_listbox.insert(END, f"• {f.name}\n")
         else:
             self.csv_listbox.insert("1.0", "Нет CSV файлов для анализа")
 

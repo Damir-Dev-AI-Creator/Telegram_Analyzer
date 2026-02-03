@@ -6,6 +6,8 @@ from tkinter import messagebox
 import threading
 import asyncio
 
+from core.utils import ClipboardManager
+
 
 class TelegramAuthDialog(ctk.CTkToplevel):
     """Диалог для ввода кода авторизации Telegram"""
@@ -103,8 +105,8 @@ class TelegramAuthDialog(ctk.CTkToplevel):
         # Привязка Enter к отправке
         self.code_entry.bind("<Return>", lambda e: self.submit_code())
 
-        # Добавляем поддержку стандартных сочетаний клавиш
-        self.bind_paste_shortcuts(self.code_entry)
+        # Добавляем поддержку стандартных сочетаний клавиш через ClipboardManager
+        ClipboardManager.bind_shortcuts(self.code_entry, self)
 
         # Поле для пароля (скрыто по умолчанию)
         self.password_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -125,8 +127,8 @@ class TelegramAuthDialog(ctk.CTkToplevel):
         self.password_entry.pack(fill="x")
         self.password_entry.bind("<Return>", lambda e: self.submit_password())
 
-        # Добавляем поддержку стандартных сочетаний клавиш
-        self.bind_paste_shortcuts(self.password_entry)
+        # Добавляем поддержку стандартных сочетаний клавиш через ClipboardManager
+        ClipboardManager.bind_shortcuts(self.password_entry, self)
 
         # Кнопки
         button_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -268,64 +270,6 @@ class TelegramAuthDialog(ctk.CTkToplevel):
     def close_dialog(self):
         """Закрыть диалог после успешной авторизации"""
         self.after(0, self.destroy)
-
-    def bind_paste_shortcuts(self, entry):
-        """Привязка стандартных сочетаний клавиш к полю ввода"""
-        # Ctrl+V - вставка
-        entry.bind('<Control-v>', lambda e: self.paste_from_clipboard(entry))
-        entry.bind('<Control-V>', lambda e: self.paste_from_clipboard(entry))
-
-        # Ctrl+C - копирование
-        entry.bind('<Control-c>', lambda e: self.copy_to_clipboard(entry))
-        entry.bind('<Control-C>', lambda e: self.copy_to_clipboard(entry))
-
-        # Ctrl+X - вырезание
-        entry.bind('<Control-x>', lambda e: self.cut_to_clipboard(entry))
-        entry.bind('<Control-X>', lambda e: self.cut_to_clipboard(entry))
-
-        # Ctrl+A - выделить всё
-        entry.bind('<Control-a>', lambda e: self.select_all(entry))
-        entry.bind('<Control-A>', lambda e: self.select_all(entry))
-
-    def paste_from_clipboard(self, entry):
-        """Вставка текста из буфера обмена"""
-        try:
-            clipboard_text = self.clipboard_get()
-            cursor_pos = entry.index("insert")
-            entry.insert(cursor_pos, clipboard_text)
-            return "break"
-        except:
-            pass
-        return "break"
-
-    def copy_to_clipboard(self, entry):
-        """Копирование выделенного текста в буфер обмена"""
-        try:
-            if entry.selection_present():
-                selected_text = entry.selection_get()
-                self.clipboard_clear()
-                self.clipboard_append(selected_text)
-        except:
-            pass
-        return "break"
-
-    def cut_to_clipboard(self, entry):
-        """Вырезание выделенного текста в буфер обмена"""
-        try:
-            if entry.selection_present():
-                selected_text = entry.selection_get()
-                self.clipboard_clear()
-                self.clipboard_append(selected_text)
-                entry.delete("sel.first", "sel.last")
-        except:
-            pass
-        return "break"
-
-    def select_all(self, entry):
-        """Выделение всего текста в поле"""
-        entry.select_range(0, "end")
-        entry.icursor("end")
-        return "break"
 
 
 class TelegramCodeHandler:

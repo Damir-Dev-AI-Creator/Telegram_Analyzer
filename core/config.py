@@ -160,6 +160,7 @@ CLAUDE_API_KEY: str = _get_str("CLAUDE_API_KEY", "")
 # Опциональные параметры
 EXCLUDE_USER_ID: int = _get_int("EXCLUDE_USER_ID", 0)
 EXCLUDE_USERNAME: str = _get_str("EXCLUDE_USERNAME", "")
+CLAUDE_MODEL: str = _get_str("CLAUDE_MODEL", "claude-sonnet-4-20250514")
 
 # Пути (используем кросс-платформенные)
 EXPORT_FOLDER: str = str(get_input_folder())
@@ -198,7 +199,7 @@ def validate_config() -> Tuple[bool, str]:
 def reload_config():
     """Перезагрузка конфигурации из .env файла"""
     global API_ID, API_HASH, PHONE, CLAUDE_API_KEY
-    global EXCLUDE_USER_ID, EXCLUDE_USERNAME
+    global EXCLUDE_USER_ID, EXCLUDE_USERNAME, CLAUDE_MODEL
 
     load_dotenv(get_env_path(), override=True)
 
@@ -208,6 +209,7 @@ def reload_config():
     CLAUDE_API_KEY = _get_str("CLAUDE_API_KEY", "")
     EXCLUDE_USER_ID = _get_int("EXCLUDE_USER_ID", 0)
     EXCLUDE_USERNAME = _get_str("EXCLUDE_USERNAME", "")
+    CLAUDE_MODEL = _get_str("CLAUDE_MODEL", "claude-sonnet-4-20250514")
 
 
 def save_config(
